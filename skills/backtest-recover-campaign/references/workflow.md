@@ -11,6 +11,7 @@
 - Bounded `skill_query` list/search/get_section, `server_capabilities`, exposure search/set, native `tools/list_changed`, host schema refresh, and context bindings.
 - Complete native tool request/result timeline with revisions, idempotency keys, random receipts, settlements, restart/resume, and final authoritative state.
 - Authorization/audience denial evidence and no private-context leakage.
+- For character-performance fixtures, a Pack-declared oracle and exact evidence for private/public beat pairing, voice markers, public-goal/private-motive links, red-line observance, belief transitions with causal events, relationship arcs, and monotonic character stages. This is deterministic contract validation, not model-scored prose quality.
 
 ## Regression workflow
 
@@ -19,10 +20,10 @@
 3. Create/import/finalize/activate through public Lobby tools; never seed internal services.
 4. Exercise Lobby to Play and optional Conflict to Play where supported. Confirm tools appear/disappear and the next legal native call succeeds.
 5. Cover facilitator/player/observer and actor/element grants, audience projections, stale revisions, exact idempotent retry, payload mismatch, and random replay.
-6. Cover isolated NPC activation/publication/close and private-context isolation.
+6. Cover isolated NPC activation/publication/close and private-context isolation. Where a performance contract exists, require at least three paired private/public beats per declared NPC, exercise every declared voice, prove allowed belief transitions and relationship causes, and fail on private-token publication, red-line mismatch, unsupported belief edges, or arc-stage regression.
 7. Restart/resume; `snapshot_change` create/restore; `branch_change` create/checkout; and `state_revision` action `list`. Force context refresh after each state-changing operation.
 8. Drive every discovered runnable campaign fixture to a legal ending; record exclusions and focused mutually exclusive paths without Cartesian explosion.
-9. Run at least two original Packs in parallel, in distinct campaigns: one random, facilitator-led long campaign with factions, clocks, downtime, and optional Conflict; one diceless, facilitator-optional campaign with distributed element stewardship and no Conflict tools. Prove different exposure sets and legal endings.
+9. Run all discovered original Packs in parallel, in distinct campaigns. The minimum matrix contains: one random, facilitator-led long campaign with factions, clocks, downtime, and optional Conflict; one diceless, facilitator-optional campaign with distributed element stewardship and no Conflict tools; and one dialogue-heavy campaign with at least five persistent NPCs, conflicting public/private motives, false-belief changes, relationship arcs, red lines, voice markers, and a recovered alternate ending. Prove different exposure sets and legal endings.
 10. Assert campaign, branch, actor knowledge, exposure revision, idempotency scope, and random stream isolation across the parallel runs. Also prove stale-revision rejection for concurrent writers in one campaign.
 11. Compare final state and receipts with declared invariants. Prose cannot close missing evidence.
 
@@ -35,7 +36,7 @@
 
 ## Outputs
 
-- Machine-readable case verdicts, per-campaign tool/notification timelines, receipts, legal ending states, cross-campaign isolation assertions, exclusions, failure/recovery classification, and residual risk.
+- Machine-readable case verdicts, per-campaign tool/notification timelines, receipts, legal ending states, cross-campaign isolation assertions, character-performance counters where declared, exclusions, failure/recovery classification, and residual risk.
 
 ## Context reset
 

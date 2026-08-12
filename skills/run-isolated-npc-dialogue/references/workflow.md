@@ -9,6 +9,7 @@
 
 - Caller/NPC actor grants, active scene, activation revision, worker binding, and MCP-filtered context.
 - Conversation journal and proposed outputs remain non-authoritative until close.
+- When a finalized Pack declares a character-performance contract, preserve its exact public-goal, private-motive, red-line, false-belief, relationship-history, voice-marker, and arc-stage references as proposal evidence. These declarations constrain the Agent's selection; they do not make MCP infer prose quality or NPC intent.
 
 ## Workflow
 
@@ -17,14 +18,15 @@
 3. Open with `npc_conversation` action `open` and expected campaign/branch/actor revisions. Pass the activation only to the isolated worker.
 4. Keep raw private context, motives, reasoning, and proposals out of the Director session.
 5. Exchange candidate turns through action `propose` while the host transport keeps private worker context isolated and MCP validates freshness.
-6. Publish only explicitly approved utterances with action `publish` and explicit audiences.
-7. Treat proposed facts, knowledge, relationships, commitments, and consequences as proposals.
-8. Use action `close` to atomically accept selected proposals, or `abort` with a reason and no authoritative semantic deltas.
-9. Verify the close/abort receipt, refresh context, and narrate only authorized publications.
+6. For a declared performance beat, record the exact Pack references used, the belief before/after edge and causal event, the respected red lines, relationship links, arc stage, and a verbatim declared voice marker. Keep this runner/audit evidence outside the native MCP argument object.
+7. Publish only explicitly approved utterances with action `publish` and explicit audiences. Reuse the declared voice marker, but reject any publication containing a Pack-declared private token.
+8. Treat proposed facts, knowledge, relationships, commitments, and consequences as proposals.
+9. Use action `close` to atomically accept selected proposals, or `abort` with a reason and no authoritative semantic deltas.
+10. Verify the close/abort receipt, refresh context, and narrate only authorized publications.
 
 ## Outputs
 
-- Conversation ID, activation/close receipts, approved publications, accepted event/state deltas, and updated context binding.
+- Conversation ID, activation/close receipts, approved publications, accepted event/state deltas, updated context binding, and—when declared—performance evidence linking voice, motive, belief transition, relationship, red-line, and arc stage.
 
 ## Blocking conditions
 
