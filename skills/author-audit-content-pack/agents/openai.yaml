@@ -1,0 +1,4 @@
+interface:
+  display_name: "Author and Audit Content Pack"
+  short_description: "Author and audit trusted content packs"
+  default_prompt: "Use $author-audit-content-pack to prepare and audit a narrative content pack."

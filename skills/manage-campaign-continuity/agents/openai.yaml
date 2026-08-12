@@ -1,0 +1,4 @@
+interface:
+  display_name: "Manage Campaign Continuity"
+  short_description: "Audit and repair campaign continuity"
+  default_prompt: "Use $manage-campaign-continuity to inspect and repair campaign continuity."
