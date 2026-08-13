@@ -19,8 +19,8 @@
 2. Validate the fixture manifest/route against the runner's supported schema and establish actor/reference alias materialization before any campaign write. Stop if the runner cannot preserve referential identity.
 3. Create/import/finalize/activate through public Lobby tools; never seed internal services.
 4. Exercise Lobby to Play and optional Conflict to Play where supported. Confirm tools appear/disappear and the next legal native call succeeds.
-5. Cover facilitator/player/observer and actor/element grants, audience projections, stale revisions, exact idempotent retry, payload mismatch, and random replay.
-6. Cover isolated NPC activation/publication/close and private-context isolation. Where a performance contract exists, require at least three paired private/public beats per declared NPC, exercise every declared voice, prove allowed belief transitions and relationship causes, and fail on private-token publication, red-line mismatch, unsupported belief edges, or arc-stage regression.
+5. Cover facilitator/player/observer, grant/update/revoke membership and actor/element authority, last-owner protection, facilitator-less owner non-escalation, owned-actor update, scene stewardship, audience projections, stale revisions, exact idempotent retry, payload mismatch, and random replay.
+6. Cover isolated NPC activation/publication/close, stale abort, and private-context isolation. Assert close receipts expose accepted proposal IDs but no raw proposal text. Where a performance contract exists, require at least three paired private/public beats per declared NPC, exercise every declared voice, prove allowed belief transitions and relationship causes, and fail on private-token publication, red-line mismatch, unsupported belief edges, or arc-stage regression.
 7. Restart/resume; `snapshot_change` create/restore; `branch_change` create/checkout; and `state_revision` action `list`. Force context refresh after each state-changing operation.
 8. Drive every discovered runnable campaign fixture to a legal ending; record exclusions and focused mutually exclusive paths without Cartesian explosion.
 9. Run all discovered original Packs in parallel, in distinct campaigns. The minimum matrix contains: one random, facilitator-led long campaign with factions, clocks, downtime, and optional Conflict; one diceless, facilitator-optional campaign with distributed element stewardship and no Conflict tools; and one dialogue-heavy campaign with at least five persistent NPCs, conflicting public/private motives, false-belief changes, relationship arcs, red lines, voice markers, and a recovered alternate ending. Prove different exposure sets and legal endings.
@@ -30,7 +30,7 @@
 ## Recovery workflow
 
 1. Stop writes, refresh trusted principal, and call `server_capabilities`, `campaign_query`, and `exposure`.
-2. Inspect state with `narrative_query`, `continuity_query`, `snapshot_query`, `branch_query`, `state_revision` action `list`, and current exposure.
+2. Inspect state with `narrative_query`, `continuity_query`, and current exposure. Only a campaign administrator may additionally use `snapshot_query`, `branch_query`, and `state_revision` action `list`; fail the test if player/observer exposure advertises them.
 3. Choose the narrowest native recovery: exact retry, close/abort stale activity, refresh revision, restart/resume, snapshot restore to a new branch, or checkout. Never simulate an unadvertised undo/redo path.
 4. Verify exposure notification, binding, and the next legal native call.
 

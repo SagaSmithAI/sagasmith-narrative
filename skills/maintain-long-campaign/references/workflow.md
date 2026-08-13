@@ -18,7 +18,7 @@
 5. Invoke `mechanic_resolve` only where explicitly declared and currently exposed.
 6. Build one explicit settlement with elapsed time, events/audiences, relationship/faction/clock/resource/thread/location/status changes, knowledge effects, and source anchors.
 7. Commit with expected revisions and idempotency; verify receipts and refresh state.
-8. Derive compact summaries and diagnostics from committed state. Snapshot at agreed milestones.
+8. Derive compact summaries and diagnostics from committed state. An authorized campaign administrator may snapshot at agreed milestones; ordinary stewards must request that administrative action rather than assuming it.
 
 ## Outputs
 

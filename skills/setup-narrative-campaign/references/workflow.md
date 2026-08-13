@@ -15,14 +15,13 @@
 ## Workflow
 
 1. Call `server_capabilities`; use `skill_query` list/search/get_section rather than reading whole Skill files; search and set `exposure` for Lobby setup. Use only returned native tools.
-2. Query existing campaigns before creating one. Resume rather than duplicate when an idempotent setup already exists.
-3. Query finalized profiles and Packs. If the requested finalized profile does not exist, switch to the `build-game-profile` authoring workflow; if a required finalized Pack does not exist, switch to `author-audit-content-pack`. Complete evidence review and explicit finalization there, then return to setup and query the released versions again. Absence alone is neither permission to invent a release nor a permanent setup blocker. Do not bind drafts or infer compatibility.
-4. Create the campaign with `campaign_setup`. Preserve returned campaign revision, branch, and context binding.
-5. Grant membership, roles, actor ownership, and optional element stewardship with `access_change`. Never trust an unbound caller-supplied principal.
+2. Query existing campaigns before creating one. Resume rather than duplicate when an idempotent setup already exists; otherwise create with `campaign_setup`, preserve the returned binding, then open a campaign-bound Lobby exposure.
+3. Query campaign-scoped profile and Pack drafts/releases with `narrative_query`. If the requested finalized profile does not exist, switch to `build-game-profile`; if a required finalized Pack does not exist, switch to `author-audit-content-pack`. Complete evidence review and explicit finalization there, then query the released versions again. Absence is neither permission to invent a release nor a permanent blocker. Do not bind drafts or infer compatibility.
+5. Grant, update, or revoke membership, roles, actor ownership, and optional element stewardship with `access_change`. Preserve at least one owner and never trust an unbound caller-supplied principal.
 6. Bind the exact profile with `profile_change` action `activate` and activate exact Pack versions with `pack_change` action `activate`.
-7. Create initial actors and narrative state with `actor_change` and campaign seed inputs only from explicit choices.
+7. Create or update initial actors with `actor_change`; apply a finalized Campaign Seed Pack for declared logical principals, memberships, actor/element grants, records, and initial ActorKnowledge. Verify logical-to-authoritative actor bindings and materialized grant counts.
 8. Run authoritative readiness validation. Separate blockers from diagnostics.
-9. If requested, create a baseline snapshot with `snapshot_change` action `create` and transition with `game_phase`.
+9. If the caller has campaign-administrator authority, create a baseline snapshot with `snapshot_change` action `create` when requested; then transition with `game_phase`.
 10. Reconcile exposure and re-query the campaign before reporting success.
 
 ## Outputs

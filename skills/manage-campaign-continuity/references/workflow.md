@@ -19,7 +19,7 @@
 3. Identify the smallest conflicting claims and their branches/revisions/sources.
 4. Classify the issue: stale projection, evidence conflict, accidental disclosure, missing event, incorrect knowledge, or deliberate canon change.
 5. If sources determine the answer, propose the narrowest source-backed correction. If canon choice remains, request authorized human selection.
-6. Commit a new auditable event/fact/knowledge revision or disclosure through `narrative_change` or atomic `narrative_settle`; use `branch_change` action `create`/`checkout` for an explicit alternate timeline. Never rewrite old history silently.
+6. Commit a new auditable event/fact/knowledge revision or disclosure through `narrative_change` or atomic `narrative_settle`. An authorized campaign administrator may use `branch_change` action `create`/`checkout` for an explicit alternate timeline. Never rewrite old history silently.
 7. Preserve audience boundaries in diagnostics and repair narration.
 8. Re-query continuity and verify that the contradiction is resolved without erasing legitimate uncertainty.
 
@@ -35,4 +35,4 @@
 
 Refresh after repair, disclosure, checkout, restore, advertised revision recovery, profile/Pack activation, or notification. Agent judges semantic conflict; MCP owns branch-scoped facts, knowledge, audiences, revisions, events, and atomic commit. No DB/core edit or summary-as-truth fallback.
 
-Use `branch_query` before checkout and `state_revision` action `list` for revision evidence. Recover with snapshots and branches; do not invent an undo/redo compatibility path. Every write carries the common campaign/revision/branch/idempotency fields and must return a verified `host_context_binding`.
+Administrative recovery uses `branch_query`, `snapshot_query`, and `state_revision` action `list`; these tools are intentionally unavailable to ordinary players/observers. Non-admin callers use their current binding and audience-filtered continuity or hand recovery to an administrator. Recover with snapshots and branches; do not invent an undo/redo compatibility path. Every write carries the common campaign/revision/branch/idempotency fields and must return a verified `host_context_binding`.

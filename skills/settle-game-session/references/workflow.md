@@ -17,7 +17,7 @@
 4. Reconcile event audiences, objective facts, ActorKnowledge, relationships, clocks/tracks, resources, commitments, advancement/recovery, and scene progress.
 5. Submit one atomic session settlement with `narrative_settle`, expected revisions, and idempotency.
 6. Verify event IDs, receipts, revisions, random cursor, and context binding.
-7. Create a milestone snapshot with `snapshot_change` action `create` when requested or policy requires it.
+7. If the caller has campaign-administrator authority, create a milestone snapshot with `snapshot_change` action `create` when requested or policy requires it; otherwise report the pending administrative checkpoint without blocking a valid settlement.
 8. Generate public, participant, actor-private, and facilitator summaries only from committed projections.
 9. Report deferred items and the next legal phase/action.
 

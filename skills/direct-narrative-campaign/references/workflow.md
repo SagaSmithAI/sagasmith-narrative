@@ -18,7 +18,7 @@
 3. Ask only for choices that cannot be inferred without overriding human authority.
 4. Interpret fictional positioning and source evidence. Decide explicit audiences, perception, comprehension, response eligibility, NPC intent, and unresolved narrative geometry.
 5. Call `mechanic_resolve` only if current exposure includes it; otherwise make only an authorized semantic ruling.
-6. Submit explicit events and state deltas through `narrative_settle` with expected revisions and an idempotency key; use `scene_change` only for start/update/end lifecycle changes.
+6. Submit explicit events and state deltas through `narrative_settle` with expected revisions and an idempotency key. Start/update/end a scene only as a profile facilitator or a declared active steward whose scene elements are currently granted; never treat campaign ownership alone as narrative authority.
 7. Verify the receipt and context binding, then narrate from committed public/actor-specific results.
 8. Use the isolated NPC dialogue Skill for persistent private NPC turns.
 9. Call `conflict_start`, `conflict_query`, `conflict_act`, and `conflict_end` only when the active profile exposes them. Do not assume Conflict exists.
@@ -34,7 +34,7 @@
 
 ## Context reset
 
-Abort/close private NPC sessions and refresh exposure after mechanic-owning mutations, scene/phase/Conflict transitions, profile/role/grant changes, branch/restore, advertised revision recovery, restart, or notification.
+Close private NPC sessions before other authoritative mutations. If the context is already stale, use `abort` with the current binding; do not try to close or publish stale proposals. Refresh exposure after mechanic-owning mutations, scene/phase/Conflict transitions, profile/role/grant changes, branch/restore, advertised revision recovery, restart, or notification.
 
 Every campaign write carries `campaign_id`, trusted `principal_id`, `expected_revision`, `idempotency_key`, and `expected_branch_id` when branch-sensitive. Verify every returned `host_context_binding` before narration continues.
 

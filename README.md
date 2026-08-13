@@ -25,6 +25,12 @@ Each Skill lives under `skills/<skill-name>/`, includes UI metadata in `agents/o
 
 Skills discover the native tool list at runtime. `mechanic_resolve` and Conflict tools are optional profile capabilities and must never be assumed. Every context-changing operation requires exposure and `host_context_binding` refresh.
 
+Campaign-scoped authoring queries are available in Lobby. Actor updates require
+facilitator or explicit actor control; a facilitator-less owner has no implicit
+narrative read/write authority. Snapshot/branch/revision recovery is reserved
+for campaign administrators, and private NPC close receipts expose proposal IDs
+without proposal text.
+
 ## Validation
 
 Run the system `skill-creator` validator once for each `skills/*` directory.
