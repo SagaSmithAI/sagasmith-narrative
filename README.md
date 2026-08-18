@@ -1,5 +1,7 @@
 # SagaSmith Narrative Skills
 
+[Website](https://sagasmithai.github.io) · [Platform overview](https://github.com/SagaSmithAI/.github/blob/main/profile/README.md) · [Hosted service](https://github.com/SagaSmithAI/SagaSmith-service) · [Content catalog](https://github.com/SagaSmithAI/SagaSmith-dnd-content-library)
+
 MCP-first Agent procedures for system-neutral, long-form narrative tabletop role-playing through `SagaSmith-narrative-mcp`.
 
 These Skills do not contain a portable engine, CLI, database access, or fallback protocol. Narrative MCP owns authoritative state and transactions; Skills own reusable semantic review and facilitation procedures.
