@@ -29,8 +29,6 @@ from sagasmith_core.branches import resolve_branch
 from sagasmith_core.database import Database
 from sagasmith_core.idempotency import request_hash
 from sagasmith_core.models import ActorGrant, Campaign, CampaignMembership, Character, Principal
-from sqlalchemy import delete, select, update
-
 from sagasmith_narrative.contracts import (
     CAMPAIGN_ROLES,
     PHASE_CONFLICT,
@@ -48,6 +46,7 @@ from sagasmith_narrative.contracts import (
     validate_record,
     validate_sources,
 )
+from sqlalchemy import delete, select, update
 
 ADMIN_ROLES = {"owner", "dm"}
 

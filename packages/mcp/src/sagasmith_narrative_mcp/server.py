@@ -17,9 +17,9 @@ from mcp.types import TextContent
 from sagasmith_core import IdempotencyWrite, default_local_principal
 from sagasmith_core.access import LOCAL_SYSTEM_PRINCIPAL_ID
 from sagasmith_core.database import Database
+from sagasmith_narrative.contracts import active_profile, narrative_document
 
 from .config import McpConfig
-from sagasmith_narrative.contracts import active_profile, narrative_document
 from .exposure import Exposure, ExposureError, ExposureRegistry
 from .policies import ADMIN_TOOLS, CORE_TOOLS, allowed_tools, policy_for_tool
 from .runtime import ADMIN_ROLES, NarrativeRuntime

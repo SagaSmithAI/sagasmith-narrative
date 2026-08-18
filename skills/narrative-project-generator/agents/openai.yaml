@@ -1,0 +1,4 @@
+interface:
+  display_name: "Narrative Project Generator"
+  short_description: "Build reviewed Narrative profiles and Packs"
+  default_prompt: "Use $narrative-project-generator to turn my narrative project source into a reviewed profile and Pack."

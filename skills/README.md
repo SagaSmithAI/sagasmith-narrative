@@ -13,6 +13,7 @@ These Skills do not contain a portable engine, CLI, database access, or fallback
 | `setup-narrative-campaign` | Campaign creation, profile/Pack binding, access, actors, and Lobby-to-Play readiness |
 | `build-game-profile` | Evidence-backed declarative profile drafting, validation, finalization, and escalation |
 | `author-audit-content-pack` | Content, Module, and Campaign Seed Pack authoring, trust review, and activation |
+| `narrative-project-generator` | Coordinated profile plus Content/Module/Campaign Seed Pack project generation |
 | `direct-narrative-campaign` | Live facilitation, authority, audiences, mechanics, and narration |
 | `advance-narrative-scene` | Scene lifecycle and atomic narrative settlement |
 | `run-isolated-npc-dialogue` | Persistent per-NPC private worker dialogue and controlled publication |

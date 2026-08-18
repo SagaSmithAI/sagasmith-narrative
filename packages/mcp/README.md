@@ -12,7 +12,7 @@ hosts must process `tools/list_changed` notifications.
 
 The server never guesses rules from prose. A campaign binds an immutable profile
 version and checksum. Profiles may use Level 0 (explicit Agent/human rulings) or
-the limited pure Level 1 mechanics in this package. More complex rules require a
+the limited pure Level 1 mechanics in the sibling Narrative Domain package. More complex rules require a
 separate system provider.
 
 Lobby administrators can inspect campaign-scoped profile/Pack drafts through
@@ -34,15 +34,15 @@ isolated dialogue, and a recovered alternate ending.
 ## Development
 
 ```powershell
-python -m pip install -e ".[dev]"
-pytest
-ruff check .
+uv sync --all-packages --all-extras
+uv run --no-sync pytest packages/mcp/tests
+uv run --no-sync ruff check packages/domain packages/mcp
 ```
 
 Run the original campaign fixtures concurrently through real stdio MCP sessions:
 
 ```powershell
-python scripts/regression_parallel_campaigns.py --output .runs/parallel
+uv run --no-sync python packages/mcp/scripts/regression_parallel_campaigns.py --output .runs/parallel
 ```
 
 The runner opens real stdio MCP sessions, uses a separate session identity for
@@ -50,12 +50,12 @@ each principal, executes every declared route step, follows a focused alternate
 branch, and emits machine-readable per-campaign timelines and a combined
 summary. A non-zero exit means the run is not accepted.
 
-The Agent Host integration uses the MCP and Agent repositories' own environments: the
+The Agent Host integration uses the Narrative workspace and Agent repository environments: the
 test process runs with `../SagaSmith-agent/.venv/Scripts/python.exe`, while the
 spawned MCP server runs with this repository's `.venv/Scripts/python.exe`:
 
 ```powershell
-../SagaSmith-agent/.venv/Scripts/python.exe -m pytest -q tests/test_agent_host_integration.py
+../SagaSmith-agent/.venv/Scripts/python.exe -m pytest -q packages/mcp/tests/test_agent_host_integration.py
 ```
 
 Run locally with `sagasmith-narrative-mcp`. Its independent default home is
