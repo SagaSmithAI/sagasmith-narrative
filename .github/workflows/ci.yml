@@ -38,7 +38,7 @@ jobs:
           uv run --no-sync pytest packages/mcp/tests --ignore=packages/mcp/tests/test_agent_host_integration.py
       - name: Install Agent host environment
         working-directory: SagaSmith-agent
-        run: uv sync
+        run: uv sync --extra dev
       - name: Verify real Agent dynamic-tool refresh
         working-directory: sagasmith-narrative
         run: >-
