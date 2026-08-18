@@ -1,0 +1,4 @@
+interface:
+  display_name: "Run Isolated NPC Dialogue"
+  short_description: "Run private isolated NPC dialogue"
+  default_prompt: "Use $run-isolated-npc-dialogue to conduct an isolated NPC conversation."

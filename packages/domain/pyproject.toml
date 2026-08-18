@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sagasmith-narrative"
+version = "0.1.0"
+description = "Deterministic declarative contracts for SagaSmith Narrative"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "SagaSmithAI" }]
+dependencies = ["jsonschema>=4.23.0,<5.0.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=9.0.0,<10.0.0", "ruff>=0.1.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sagasmith_narrative"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]

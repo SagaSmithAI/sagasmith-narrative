@@ -1,0 +1,4 @@
+interface:
+  display_name: "Maintain Long Campaign"
+  short_description: "Maintain long-running campaign state"
+  default_prompt: "Use $maintain-long-campaign to advance downtime and the persistent world."

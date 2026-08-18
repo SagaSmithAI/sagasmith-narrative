@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backtest and Recover Campaign"
+  short_description: "Backtest workflows and recover campaigns"
+  default_prompt: "Use $backtest-recover-campaign to run a public-facade backtest or recover a campaign."

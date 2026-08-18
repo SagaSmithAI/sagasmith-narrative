@@ -1,0 +1,4 @@
+interface:
+  display_name: "Direct Narrative Campaign"
+  short_description: "Direct authoritative narrative play"
+  default_prompt: "Use $direct-narrative-campaign to facilitate the current campaign scene."
