@@ -31,7 +31,7 @@ from sagasmith_core.idempotency import request_hash
 from sagasmith_core.models import ActorGrant, Campaign, CampaignMembership, Character, Principal
 from sqlalchemy import delete, select, update
 
-from .contracts import (
+from sagasmith_narrative.contracts import (
     CAMPAIGN_ROLES,
     PHASE_CONFLICT,
     PHASE_LOBBY,

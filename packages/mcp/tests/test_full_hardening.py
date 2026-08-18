@@ -7,7 +7,7 @@ from sagasmith_core.database import Database, sqlite_database_url
 from sagasmith_core.models import CampaignSnapshot
 
 from sagasmith_narrative_mcp.config import McpConfig
-from sagasmith_narrative_mcp.contracts import (
+from sagasmith_narrative.contracts import (
     narrative_document,
     validate_profile,
     validate_record,

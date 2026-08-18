@@ -15,7 +15,9 @@ def test_real_sagasmith_agent_registry_refreshes_native_tools(tmp_path: Path) ->
 async def _exercise_agent_host(tmp_path: Path) -> None:
     pytest.importorskip("tiktoken", reason="run with SagaSmith-agent's Python environment")
     root = Path(__file__).parents[1]
-    agent_root = root.parent / "SagaSmith-agent"
+    monorepo = root.parents[1]
+    workspace = monorepo.parent
+    agent_root = workspace / "SagaSmith-agent"
     sys.path.insert(0, str(agent_root))
     try:
         from nanobot.agent.tools.mcp import connect_mcp_servers
@@ -25,11 +27,15 @@ async def _exercise_agent_host(tmp_path: Path) -> None:
         env = {
             "SAGASMITH_NARRATIVE_MCP_HOME": str(tmp_path / "home"),
             "PYTHONPATH": os.pathsep.join(
-                [str(root / "src"), str(root.parent / "sagasmith-core" / "src")]
+                [
+                    str(root / "src"),
+                    str(monorepo / "packages" / "domain" / "src"),
+                    str(workspace / "sagasmith-core" / "src"),
+                ]
             ),
         }
         registry = ToolRegistry()
-        narrative_python = root / ".venv" / (
+        narrative_python = monorepo / ".venv" / (
             "Scripts/python.exe" if os.name == "nt" else "bin/python"
         )
         assert narrative_python.is_file(), "install Narrative MCP dev environment first"

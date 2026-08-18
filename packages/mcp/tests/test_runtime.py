@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from sagasmith_core.database import Database, sqlite_database_url
 
-from sagasmith_narrative_mcp.contracts import narrative_document
+from sagasmith_narrative.contracts import narrative_document
 from sagasmith_narrative_mcp.runtime import NarrativeRuntime
 
 

@@ -14,7 +14,8 @@ MAX_HITS = 20
 class SkillCatalog:
     def __init__(self, root: str | Path | None = None) -> None:
         configured = root or os.environ.get("SAGASMITH_NARRATIVE_SKILLS_DIR")
-        self.root = Path(configured).resolve() if configured else None
+        default_root = Path(__file__).resolve().parents[4] / "skills"
+        self.root = Path(configured).resolve() if configured else default_root
 
     def _files(self) -> list[Path]:
         if self.root is None or not self.root.is_dir():

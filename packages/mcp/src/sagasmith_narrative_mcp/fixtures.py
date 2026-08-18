@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .contracts import validate_profile
+from sagasmith_narrative.contracts import validate_profile
 
 REQUIRED_FILES = (
     "manifest.json",

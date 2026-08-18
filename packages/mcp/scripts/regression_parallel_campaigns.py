@@ -32,7 +32,7 @@ from sagasmith_narrative_mcp.route_dsl import (
 )
 
 ROOT = Path(__file__).parents[1]
-SKILLS = ROOT.parent / "SagaSmith-narrative-skills" / "skills"
+SKILLS = ROOT.parents[1] / "skills"
 
 
 def decode(result: Any) -> dict[str, Any]:
