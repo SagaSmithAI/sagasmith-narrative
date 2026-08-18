@@ -1,0 +1,4 @@
+interface:
+  display_name: "Settle Game Session"
+  short_description: "Settle and close narrative sessions"
+  default_prompt: "Use $settle-game-session to reconcile and close the current play session."

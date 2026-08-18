@@ -1,0 +1,4 @@
+interface:
+  display_name: "Advance Narrative Scene"
+  short_description: "Advance and settle narrative scenes"
+  default_prompt: "Use $advance-narrative-scene to advance and settle the current scene."

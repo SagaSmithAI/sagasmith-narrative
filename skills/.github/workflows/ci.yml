@@ -1,0 +1,45 @@
+name: Skill Contract
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate every portable Skill bundle
+        shell: python
+        run: |
+          from pathlib import Path
+
+          roots = sorted(path.parent for path in Path("skills").glob("*/SKILL.md"))
+          if not roots:
+              raise SystemExit("no Skill bundles found")
+          for root in roots:
+              text = (root / "SKILL.md").read_text(encoding="utf-8-sig")
+              if not text.startswith("---\n") or text.count("---") < 2:
+                  raise SystemExit(f"{root}: SKILL.md has no frontmatter")
+              frontmatter = text.split("---", 2)[1]
+              fields = [
+                  line.split(":", 1)[0].strip()
+                  for line in frontmatter.splitlines()
+                  if line.strip()
+              ]
+              if fields != ["name", "description"]:
+                  raise SystemExit(
+                      f"{root}: frontmatter must contain only name and description"
+                  )
+              if not (root / "references" / "workflow.md").is_file():
+                  raise SystemExit(f"{root}: references/workflow.md is required")
+              if not (root / "agents" / "openai.yaml").is_file():
+                  raise SystemExit(f"{root}: agents/openai.yaml is required")
+          print(f"validated {len(roots)} Skill bundles")

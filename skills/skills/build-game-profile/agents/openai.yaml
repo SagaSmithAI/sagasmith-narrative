@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build Game Profile"
+  short_description: "Build and review narrative game profiles"
+  default_prompt: "Use $build-game-profile to draft, review, and finalize a narrative game profile."

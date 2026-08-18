@@ -1,0 +1,4 @@
+interface:
+  display_name: "Setup Narrative Campaign"
+  short_description: "Create an MCP-first narrative campaign"
+  default_prompt: "Use $setup-narrative-campaign to create and validate a new narrative campaign."
