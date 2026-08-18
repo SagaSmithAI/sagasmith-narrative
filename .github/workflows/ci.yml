@@ -36,9 +36,9 @@ jobs:
           uv run --no-sync ruff check packages/domain packages/mcp
           uv run --no-sync pytest packages/domain/tests
           uv run --no-sync pytest packages/mcp/tests --ignore=packages/mcp/tests/test_agent_host_integration.py
-      - name: Install locked Agent host environment
+      - name: Install Agent host environment
         working-directory: SagaSmith-agent
-        run: uv sync --frozen
+        run: uv sync
       - name: Verify real Agent dynamic-tool refresh
         working-directory: sagasmith-narrative
         run: >-
