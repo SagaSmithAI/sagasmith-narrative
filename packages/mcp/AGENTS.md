@@ -1,6 +1,6 @@
-# Narrative MCP Boundary
+# Narrative MCP Package Boundary
 
-Follow the workspace Convergence Doctrine. This repository owns authoritative
+Follow the root `AGENTS.md` and workspace Convergence Doctrine. This package owns authoritative
 campaign phase, authorization, dynamic native tool exposure, revisions,
 idempotency, random streams, atomic narrative settlement, profile/Pack runtime
 binding, and isolated NPC conversation journals.
