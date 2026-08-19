@@ -28,6 +28,16 @@ listed above. The former standalone MCP, Skills, and generic Module Generator
 repositories are archived read-only; current issues, releases, integrations,
 and documentation belong here.
 
+## Verified integration baseline
+
+The current hosted boundary keeps Narrative process-local over stdio while the
+Agent supplies signed `sagasmith.auth-context/v1` principal context and refreshes
+native schemas after `tools/list_changed`. Real-Agent integration coverage calls
+the public MCP facade rather than fabricated internal results. On 2026-08-20
+this revision was included in the rebuilt hosted stack used for the concurrent
+D&D and CoC reference regressions; that stack result validates composition and
+startup, not a complete Narrative project playthrough.
+
 ## Development
 
 ```bash
