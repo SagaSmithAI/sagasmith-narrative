@@ -16,6 +16,13 @@ from mcp.server.lowlevel.server import NotificationOptions
 from mcp.types import TextContent
 from sagasmith_core import IdempotencyWrite, default_local_principal
 from sagasmith_core.access import LOCAL_SYSTEM_PRINCIPAL_ID
+from sagasmith_core.auth_context import (
+    AUTH_CONTEXT_META_KEY,
+    AUTH_CONTEXT_RECEIPT_META_KEY,
+    AuthContext,
+    AuthContextNonceGuard,
+    verify_auth_context,
+)
 from sagasmith_core.database import Database
 from sagasmith_narrative.contracts import active_profile, narrative_document
 
@@ -24,6 +31,37 @@ from .exposure import Exposure, ExposureError, ExposureRegistry
 from .policies import ADMIN_TOOLS, CORE_TOOLS, allowed_tools, policy_for_tool
 from .runtime import ADMIN_ROLES, NarrativeRuntime
 from .skills import SkillCatalog
+
+
+def _auth_receipt_revision(value: Any) -> int | str | None:
+    if not isinstance(value, dict):
+        return None
+    for key in ("campaign_revision", "revision", "new_revision", "to_revision"):
+        revision = value.get(key)
+        if isinstance(revision, (int, str)) and not isinstance(revision, bool):
+            return revision
+    for nested in value.values():
+        if isinstance(nested, dict) and (revision := _auth_receipt_revision(nested)) is not None:
+            return revision
+    return None
+
+
+def _attach_auth_receipt(result: Any, context: AuthContext | None, tool: str) -> Any:
+    if context is None or not (isinstance(result, tuple) and len(result) == 2):
+        return result
+    content, structured = result
+    receipt = context.audit_receipt(tool=tool, revision=_auth_receipt_revision(structured))
+    updated = []
+    attached = False
+    for item in content:
+        if not attached and isinstance(item, TextContent):
+            metadata = dict(item.meta or {})
+            metadata[AUTH_CONTEXT_RECEIPT_META_KEY] = receipt
+            updated.append(item.model_copy(update={"meta": metadata}))
+            attached = True
+        else:
+            updated.append(item)
+    return updated, structured
 
 
 class SessionExposureFastMCP(FastMCP):
@@ -35,6 +73,7 @@ class SessionExposureFastMCP(FastMCP):
         registry: ExposureRegistry,
         runtime: NarrativeRuntime,
         bound_principal_id: str | None = None,
+        auth_context_secret: str | None = None,
         **kwargs: Any,
     ) -> None:
         # mcp 1.29 ships its Settings generic with a deferred lifespan
@@ -47,6 +86,8 @@ class SessionExposureFastMCP(FastMCP):
         self.registry = registry
         self.runtime = runtime
         self._bound_principal_id = bound_principal_id.strip() if bound_principal_id else None
+        self._auth_context_secret = auth_context_secret
+        self._auth_context_nonces = AuthContextNonceGuard() if auth_context_secret else None
         self._sessions: WeakValueDictionary[str, Any] = WeakValueDictionary()
         self._exposure_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
         self._campaign_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
@@ -90,6 +131,13 @@ class SessionExposureFastMCP(FastMCP):
         result = dict(arguments)
         argument = self._principal_argument(name)
         expected = self._bound_principal_id or (exposure.principal_id if exposure else None)
+        if (
+            name == "exposure"
+            and result.get("action") == "open"
+            and self._auth_context_secret is not None
+            and self._bound_principal_id is None
+        ):
+            return result
         if argument is None or expected is None:
             return result
         supplied = result.get(argument)
@@ -153,6 +201,72 @@ class SessionExposureFastMCP(FastMCP):
                     }
                 }
         return result
+
+    @staticmethod
+    def _argument_campaign_id(arguments: dict[str, Any]) -> str:
+        campaign_id = str(arguments.get("campaign_id") or "").strip()
+        if campaign_id:
+            return campaign_id
+        for key in ("payload", "data"):
+            nested = arguments.get(key)
+            if isinstance(nested, dict) and (value := str(nested.get("campaign_id") or "").strip()):
+                return value
+        return ""
+
+    def _verify_request_auth_context(
+        self,
+        *,
+        name: str,
+        arguments: dict[str, Any],
+        session: Any,
+        exposure: Exposure | None,
+    ) -> AuthContext | None:
+        principal_argument = self._principal_argument(name)
+        if self._auth_context_secret is None or principal_argument is None:
+            return None
+        actor = str(arguments.get(principal_argument) or "").strip()
+        if not actor:
+            raise ExposureError("tool caller principal is required")
+        try:
+            metadata = self.get_context().request_context.meta
+            envelope = getattr(metadata, AUTH_CONTEXT_META_KEY, None)
+            expected_campaign = self._argument_campaign_id(arguments)
+            if (
+                not expected_campaign
+                and exposure is not None
+                and not (name == "exposure" and arguments.get("action") == "open")
+            ):
+                expected_campaign = exposure.campaign_id or ""
+            context = verify_auth_context(
+                envelope,
+                self._auth_context_secret,
+                expected_actor=actor,
+                expected_campaign=expected_campaign,
+            )
+        except ValueError as exc:
+            raise ExposureError(str(exc)) from exc
+        bound_session_id = getattr(session, "_sagasmith_auth_session_id", None)
+        bound_conversation = getattr(session, "_sagasmith_auth_conversation", None)
+        if bound_session_id is not None and bound_session_id != context.session_id:
+            raise ExposureError("auth context session changed within one MCP session")
+        if bound_conversation is not None and bound_conversation != context.conversation_principal:
+            raise ExposureError("auth context conversation changed within one MCP session")
+        expected_epoch = (
+            exposure.revision
+            if exposure is not None
+            and not (name == "exposure" and arguments.get("action") == "open")
+            else 0
+        )
+        if context.authorization_epoch != expected_epoch:
+            raise ExposureError("auth context authorization_epoch is stale")
+        assert self._auth_context_nonces is not None
+        try:
+            self._auth_context_nonces.remember(context)
+        except (RuntimeError, ValueError) as exc:
+            raise ExposureError(str(exc)) from exc
+        setattr(session, "_sagasmith_auth_session_id", context.session_id)
+        setattr(session, "_sagasmith_auth_conversation", context.conversation_principal)
+        return context
 
     async def _refresh(self, campaign_id: str | None = None) -> bool:
         changed = []
@@ -226,10 +340,16 @@ class SessionExposureFastMCP(FastMCP):
             if name not in CORE_TOOLS:
                 raise ExposureError("domain tools require a real MCP session exposure")
             return await super().call_tool(name, arguments)
-        session_key, _ = request
+        session_key, request_session = request
         await self._refresh()
         exposure = self.registry.active(session_key)
         arguments = self._bind_principal(name, arguments, exposure)
+        auth_context = self._verify_request_auth_context(
+            name=name,
+            arguments=arguments,
+            session=request_session,
+            exposure=exposure,
+        )
         if name not in CORE_TOOLS:
             if exposure is None:
                 raise ExposureError("open a session exposure before calling domain tools")
@@ -263,9 +383,9 @@ class SessionExposureFastMCP(FastMCP):
             )
             binding = self.runtime.binding(campaign_id, principal)
             current = self.registry.active(session_key)
-            binding["exposure_revision"] = current.revision if current else None
+            binding["authorization_epoch"] = current.revision if current else 0
             result = self._attach(result, binding)
-        return result
+        return _attach_auth_receipt(result, auth_context, name)
 
 
 def create_server(config: McpConfig | None = None) -> FastMCP:
@@ -281,6 +401,7 @@ def create_server(config: McpConfig | None = None) -> FastMCP:
         registry=registry,
         runtime=runtime,
         bound_principal_id=config.bound_principal_id,
+        auth_context_secret=config.auth_context_secret,
     )
 
     def common(
@@ -943,6 +1064,14 @@ def create_server(config: McpConfig | None = None) -> FastMCP:
                 asdict(item) for item in runtime.revisions.history(campaign_id, limit=limit)
             ]
         }
+
+    for registered_tool in mcp._tool_manager.list_tools():
+        registered_tool.meta = {
+            **dict(registered_tool.meta or {}),
+            "sagasmith_domain_context": "sagasmith-narrative",
+        }
+        if registered_tool.name == "campaign_query":
+            registered_tool.meta["sagasmith_context_sync"] = True
 
     return mcp
 

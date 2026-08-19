@@ -47,6 +47,10 @@ async def _exercise_stdio(tmp_path: Path) -> None:
         async with ClientSession(read, write, message_handler=handler) as session:
             await session.initialize()
             assert {item.name for item in (await session.list_tools()).tools} == set(CORE_TOOLS)
+            assert all(
+                item.meta.get("sagasmith_domain_context") == "sagasmith-narrative"
+                for item in (await session.list_tools()).tools
+            )
             value(await session.call_tool("exposure", {"action": "open"}))
             value(
                 await session.call_tool(
@@ -112,4 +116,10 @@ async def _exercise_stdio(tmp_path: Path) -> None:
             assert binding["campaign_id"] == campaign_id
             assert binding["branch_id"] == branch["id"]
             assert binding["phase"] == "lobby"
+            assert binding["domain"] == "sagasmith-narrative"
+            assert len(binding["principal_fingerprint"]) == 64
+            assert len(binding["authorization_fingerprint"]) == 64
+            assert len(binding["context_epoch"]) == 64
+            assert binding["memory_policy"] == "domain_authoritative"
+            assert "principal_id" not in binding
             assert notifications
