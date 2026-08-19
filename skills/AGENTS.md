@@ -1,6 +1,7 @@
 # AGENTS.md
 
-This repository contains MCP-first Skills for `SagaSmith-narrative-mcp`.
+This directory contains the MCP-first Skills shipped from the
+`sagasmith-narrative` vertical repository.
 
 ## Boundaries
 

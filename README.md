@@ -1,5 +1,9 @@
 # SagaSmith Narrative
 
+[Domain](packages/domain/README.md) · [MCP](packages/mcp/README.md) ·
+[Skills](skills/README.md) ·
+[Platform](https://github.com/SagaSmithAI/.github/blob/main/profile/README.md)
+
 SagaSmith Narrative is the vertical monorepo for system-neutral long-form
 tabletop narrative play. It versions deterministic declarative contracts, the
 authoritative MCP server, and Agent Skills together while keeping their package
@@ -18,6 +22,11 @@ The Domain package contains deterministic validation only. MCP remains the sole
 authority for campaign state, authorization, phases, revisions, idempotency,
 random streams, dynamic tool exposure, and atomic settlement. Semantic review,
 audience decisions, NPC choices, and narration remain Agent/Skill concerns.
+
+This repository is the current source of truth for every Narrative component
+listed above. The former standalone MCP, Skills, and generic Module Generator
+repositories are archived read-only; current issues, releases, integrations,
+and documentation belong here.
 
 ## Development
 

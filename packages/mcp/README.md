@@ -2,6 +2,8 @@
 
 [Website](https://sagasmithai.github.io) · [Platform overview](https://github.com/SagaSmithAI/.github/blob/main/profile/README.md) · [Hosted service](https://github.com/SagaSmithAI/SagaSmith-service) · [Content catalog](https://github.com/SagaSmithAI/SagaSmith-dnd-content-library)
 
+> Current source: `sagasmith-narrative/packages/mcp`. It is released from the Narrative vertical monorepo with its Domain and Skills contracts.
+
 An authoritative, system-neutral MCP for long-form tabletop narrative play. It
 depends on `sagasmith-core` for durable campaigns, transactions, revisions,
 documents, continuity ledgers, snapshots, and branches.
