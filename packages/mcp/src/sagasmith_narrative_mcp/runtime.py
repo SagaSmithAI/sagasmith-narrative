@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import random
 import uuid
 from copy import deepcopy
@@ -28,6 +29,7 @@ from sagasmith_core import (
 from sagasmith_core.branches import resolve_branch
 from sagasmith_core.database import Database
 from sagasmith_core.idempotency import request_hash
+from sagasmith_core.integrity import canonical_json
 from sagasmith_core.models import ActorGrant, Campaign, CampaignMembership, Character, Principal
 from sagasmith_narrative.contracts import (
     CAMPAIGN_ROLES,
@@ -241,16 +243,42 @@ class NarrativeRuntime:
         document = narrative_document(campaign.state)
         profile = active_profile(document)
         membership = self.access.require_campaign(campaign_id, principal_id)
-        return {
+        value = {
+            "domain": "sagasmith-narrative",
             "campaign_id": campaign_id,
+            "principal_fingerprint": hashlib.sha256(
+                principal_id.encode("utf-8")
+            ).hexdigest(),
+            "authorization_fingerprint": self.access.authorization_fingerprint(
+                campaign_id, principal_id
+            ),
+            "role": membership.role,
+            "audience": "dm" if membership.role in ADMIN_ROLES else "player",
             "branch_id": self.branch_id(campaign_id),
+            "memory_policy": "domain_authoritative",
             "campaign_revision": campaign.revision,
             "phase": document["phase"],
             "profile": (
                 {key: profile[key] for key in ("id", "version", "checksum")} if profile else None
             ),
-            "principal_id": principal_id,
-            "role": membership.role,
+        }
+        epoch_fields = {
+            key: value[key]
+            for key in (
+                "domain",
+                "campaign_id",
+                "principal_fingerprint",
+                "authorization_fingerprint",
+                "role",
+                "audience",
+                "branch_id",
+            )
+        }
+        return {
+            **value,
+            "context_epoch": hashlib.sha256(
+                canonical_json(epoch_fields).encode("utf-8")
+            ).hexdigest(),
         }
 
     def snapshot_create(
