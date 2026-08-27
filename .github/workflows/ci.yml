@@ -11,6 +11,19 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: locked-py311
+            python_version: "3.11"
+            core_ref: 08ac611cfa8e551231028d181c5c3bf2727ee0f7
+            agent_ref: 86d6fa0748d7056e5f8af103b4ef3ec6fd3607c3
+          - lane: compatibility-py312
+            python_version: "3.12"
+            core_ref: main
+            agent_ref: main
+    name: ${{ matrix.lane }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -18,14 +31,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: SagaSmithAI/sagasmith-core
+          ref: ${{ matrix.core_ref }}
           path: sagasmith-core
       - uses: actions/checkout@v7
         with:
           repository: SagaSmithAI/SagaSmith-agent
+          ref: ${{ matrix.agent_ref }}
           path: SagaSmith-agent
       - uses: astral-sh/setup-uv@v10.0.1
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python_version }}
           enable-cache: true
           prune-cache: true
       - name: Install locked Narrative workspace
