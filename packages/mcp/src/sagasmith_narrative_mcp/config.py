@@ -23,6 +23,9 @@ class McpConfig:
     database_url: str | None = None
     bound_principal_id: str | None = None
     auth_context_secret: str | None = None
+    http_host: str = "127.0.0.1"
+    http_port: int = 8770
+    http_path: str = "/mcp"
 
     @classmethod
     def from_environment(cls) -> "McpConfig":
@@ -40,4 +43,7 @@ class McpConfig:
             database_url=configured_url,
             bound_principal_id=os.environ.get("SAGASMITH_NARRATIVE_MCP_BOUND_PRINCIPAL_ID"),
             auth_context_secret=_auth_context_secret(),
+            http_host=os.environ.get("SAGASMITH_NARRATIVE_MCP_HTTP_HOST", "127.0.0.1"),
+            http_port=int(os.environ.get("SAGASMITH_NARRATIVE_MCP_HTTP_PORT", "8770")),
+            http_path=os.environ.get("SAGASMITH_NARRATIVE_MCP_HTTP_PATH", "/mcp"),
         )

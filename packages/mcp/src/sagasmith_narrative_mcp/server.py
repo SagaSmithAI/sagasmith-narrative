@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from copy import deepcopy
 from dataclasses import asdict
 from typing import Any, Literal
@@ -402,6 +403,9 @@ def create_server(config: McpConfig | None = None) -> FastMCP:
         runtime=runtime,
         bound_principal_id=config.bound_principal_id,
         auth_context_secret=config.auth_context_secret,
+        host=config.http_host,
+        port=config.http_port,
+        streamable_http_path=config.http_path,
     )
 
     def common(
@@ -422,6 +426,16 @@ def create_server(config: McpConfig | None = None) -> FastMCP:
         return {
             "system_id": "narrative",
             "schema_version": 1,
+            "authoritative_contract": {
+                "schema": "sagasmith.authoritative-mcp/v1",
+                "transports": ["stdio", "streamable-http"],
+                "shared_handlers": True,
+                "dynamic_tool_exposure": "session-scoped",
+                "revision_model": "optimistic",
+                "idempotency_model": "required-for-writes",
+                "authority_model": "server-owned",
+                "error_model": "mcp-tool-error",
+            },
             "base_phases": ["lobby", "play"],
             "optional_phases": ["conflict"],
             "mechanics_levels": [0, 1],
@@ -432,8 +446,9 @@ def create_server(config: McpConfig | None = None) -> FastMCP:
             "identity_mode": (
                 "process_bound_principal"
                 if config.bound_principal_id
-                else "trusted_single_user_local_stdio"
+                else "trusted_single_user_local_transport"
             ),
+            "loopback_streamable_http_supported": True,
             "shared_network_transport_supported": False,
         }
 
@@ -1077,7 +1092,19 @@ def create_server(config: McpConfig | None = None) -> FastMCP:
 
 
 def main() -> None:
-    create_server().run(transport="stdio")
+    config = McpConfig.from_environment()
+    transport = os.environ.get("SAGASMITH_NARRATIVE_MCP_TRANSPORT", "stdio").strip().casefold()
+    if transport not in {"stdio", "streamable-http"}:
+        raise ValueError(
+            "SAGASMITH_NARRATIVE_MCP_TRANSPORT must be 'stdio' or 'streamable-http'"
+        )
+    if transport == "streamable-http" and config.http_host not in {
+        "127.0.0.1",
+        "::1",
+        "localhost",
+    }:
+        raise ValueError("Narrative local Streamable HTTP must bind to a loopback host")
+    create_server(config).run(transport=transport)
 
 
 if __name__ == "__main__":

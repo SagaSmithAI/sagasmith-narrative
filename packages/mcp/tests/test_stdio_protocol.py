@@ -51,6 +51,14 @@ async def _exercise_stdio(tmp_path: Path) -> None:
                 item.meta.get("sagasmith_domain_context") == "sagasmith-narrative"
                 for item in (await session.list_tools()).tools
             )
+            capabilities = value(await session.call_tool("server_capabilities", {}))
+            assert capabilities["authoritative_contract"]["schema"] == (
+                "sagasmith.authoritative-mcp/v1"
+            )
+            assert capabilities["authoritative_contract"]["transports"] == [
+                "stdio",
+                "streamable-http",
+            ]
             value(await session.call_tool("exposure", {"action": "open"}))
             value(
                 await session.call_tool(

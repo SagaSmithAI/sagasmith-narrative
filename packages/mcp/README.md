@@ -1,6 +1,6 @@
 # SagaSmith Narrative MCP
 
-[Website](https://sagasmithai.github.io) · [Platform overview](https://github.com/SagaSmithAI/.github/blob/main/profile/README.md) · [Hosted service](https://github.com/SagaSmithAI/SagaSmith-service) · [Content catalog](https://github.com/SagaSmithAI/SagaSmith-dnd-content-library)
+[Website](https://sagasmithai.github.io) · [Platform overview](https://github.com/SagaSmithAI/.github/blob/main/profile/README.md) · [SagaSmith Web](https://github.com/SagaSmithAI/SagaSmith-service) · [Content catalog](https://github.com/SagaSmithAI/SagaSmith-dnd-content-library)
 
 > Current source: `sagasmith-narrative/packages/mcp`. It is released from the Narrative vertical monorepo with its Domain and Skills contracts.
 
@@ -60,7 +60,23 @@ spawned MCP server runs with this repository's `.venv/Scripts/python.exe`:
 ../SagaSmith-agent/.venv/Scripts/python.exe -m pytest -q packages/mcp/tests/test_agent_host_integration.py
 ```
 
-Run locally with `sagasmith-narrative-mcp`. Its independent default home is
+Run locally over stdio with `sagasmith-narrative-mcp`. The same authoritative
+handlers are also available over loopback-only Streamable HTTP:
+
+```powershell
+$env:SAGASMITH_NARRATIVE_MCP_TRANSPORT = "streamable-http"
+$env:SAGASMITH_NARRATIVE_MCP_HTTP_HOST = "127.0.0.1"
+$env:SAGASMITH_NARRATIVE_MCP_HTTP_PORT = "8770"
+sagasmith-narrative-mcp
+```
+
+Both transports expose identical tool schemas, errors, revisions, idempotency,
+and authority behavior. Streamable HTTP is for clients on the same machine; it
+is rejected when configured with a non-loopback bind address. Hosted or
+multi-user callers must continue to supply a trusted principal-scoped auth
+adapter rather than publishing this local endpoint.
+
+Its independent default home is
 `~/.sagasmith/narrative-mcp`. Set `SAGASMITH_NARRATIVE_MCP_HOME` to relocate it,
 `SAGASMITH_NARRATIVE_MCP_DATABASE_URL` to use an explicit database, and
 `SAGASMITH_NARRATIVE_MCP_BOUND_PRINCIPAL_ID` when the transport authenticates
@@ -73,9 +89,9 @@ database's native backup mechanism. There is no database downgrade or
 dual-protocol mode: rollback restores the database together with matching Core
 and MCP versions as one unit.
 
-Without `SAGASMITH_NARRATIVE_MCP_BOUND_PRINCIPAL_ID`, stdio is a trusted
-single-user local mode; model-supplied principal fields are not multiplayer
-authentication. A multiplayer deployment must bind one authenticated principal
-per MCP process through a trusted transport. Shared-principal HTTP exposure is
-not currently supported and the server must not be published directly to a
-network.
+Without `SAGASMITH_NARRATIVE_MCP_BOUND_PRINCIPAL_ID`, stdio and loopback HTTP
+are trusted single-user local modes; model-supplied principal fields are not
+multiplayer authentication. A multiplayer deployment must bind one
+authenticated principal per MCP process through a trusted transport.
+Shared-principal HTTP exposure is not supported and the server must not be
+published directly to a network.
