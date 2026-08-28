@@ -446,12 +446,14 @@ def test_settlement_cas_allows_only_one_concurrent_writer(tmp_path: Path) -> Non
     assert first.campaigns.get(campaign_id).revision == revision + 1
 
 
-def test_no_request_context_lists_only_bootstrap_and_rejects_domain_call(
+def test_no_request_context_lists_stable_catalog_but_rejects_domain_call(
     tmp_path: Path,
 ) -> None:
     server = create_server(McpConfig(database_url=sqlite_database_url(tmp_path / "no-context.db")))
     tools = asyncio.run(server.list_tools())
-    assert {tool.name for tool in tools} == set(CORE_TOOLS)
+    names = [tool.name for tool in tools]
+    assert names == sorted(names)
+    assert set(CORE_TOOLS) < set(names)
 
     with pytest.raises(ExposureError):
         asyncio.run(

@@ -38,7 +38,7 @@ def _wait_for_port(port: int, process: subprocess.Popen[str], output: TextIO) ->
 
 
 def _value(result):
-    assert not result.isError, result.content
+    assert not result.is_error, result.content
     return json.loads(result.content[0].text)
 
 
@@ -67,30 +67,23 @@ def test_real_streamable_http_uses_the_authoritative_contract(tmp_path: Path) ->
 
         async def exercise() -> None:
             async with streamable_http_client(f"http://127.0.0.1:{port}/mcp") as streams:
-                read, write, _ = streams
+                read, write = streams
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     initial_tools = await session.list_tools()
-                    schemas = {
-                        item.name: item.inputSchema
-                        for item in initial_tools.tools
-                    }
+                    schemas = {item.name: item.input_schema for item in initial_tools.tools}
                     assert "server_capabilities" in schemas
                     assert "exposure" in schemas
 
-                    capabilities = _value(
-                        await session.call_tool("server_capabilities", {})
-                    )
+                    capabilities = _value(await session.call_tool("server_capabilities", {}))
                     contract = capabilities["authoritative_contract"]
-                    assert contract["schema"] == "sagasmith.authoritative-mcp/v1"
+                    assert contract["schema"] == "sagasmith.authoritative-mcp/v2"
                     assert contract["transports"] == ["stdio", "streamable-http"]
                     assert contract["shared_handlers"] is True
                     assert capabilities["identity_mode"] == "process_bound_principal"
 
-                    error = await session.call_tool(
-                        "campaign_query", {"action": "get"}
-                    )
-                    assert error.isError is True
+                    error = await session.call_tool("campaign_query", {"action": "get"})
+                    assert error.is_error is True
                     assert "campaign_id is required" in error.content[0].text
 
                     opened = _value(
@@ -112,12 +105,8 @@ def test_real_streamable_http_uses_the_authoritative_contract(tmp_path: Path) ->
                         "idempotency_key": "http-create",
                         "principal_id": "model:forged",
                     }
-                    created = _value(
-                        await session.call_tool("campaign_setup", create_arguments)
-                    )
-                    replayed = _value(
-                        await session.call_tool("campaign_setup", create_arguments)
-                    )
+                    created = _value(await session.call_tool("campaign_setup", create_arguments))
+                    replayed = _value(await session.call_tool("campaign_setup", create_arguments))
                     assert replayed == created
                     campaign_id = created["id"]
                     _value(
@@ -159,7 +148,7 @@ def test_real_streamable_http_uses_the_authoritative_contract(tmp_path: Path) ->
                             "idempotency_key": "http-stale",
                         },
                     )
-                    assert stale.isError is True
+                    assert stale.is_error is True
                     assert "revision" in stale.content[0].text.casefold()
 
         asyncio.run(exercise())

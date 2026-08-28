@@ -1,7 +1,7 @@
 # Narrative MCP Package Boundary
 
 Follow the root `AGENTS.md` and workspace Convergence Doctrine. This package owns authoritative
-campaign phase, authorization, dynamic native tool exposure, revisions,
+campaign phase, per-request authorization, deterministic tool catalog, revisions,
 idempotency, random streams, atomic narrative settlement, profile/Pack runtime
 binding, and isolated NPC conversation journals.
 
@@ -10,5 +10,7 @@ Level 1 mechanics are deliberately bounded and declarative. A mechanism that
 needs executable code or a multi-step state machine belongs in an independent
 system package.
 
-There is one MCP-first public protocol. Do not add CLI state mutation, fixed
-tool supersets, text simulations, compatibility aliases, or fallback paths.
+MCP 2026-07-28 is the primary public protocol. The Host selects a small model
+subset from the stable catalog; legacy initialized/session behavior is an
+explicit migration adapter. Do not add CLI state mutation, text simulations,
+compatibility aliases, or silent fallback paths.

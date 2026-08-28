@@ -10,7 +10,7 @@ new narrative contracts and coordinates them at the MCP boundary.
 
 The MCP owns:
 
-- campaign phase and session-aware native tool exposure;
+- campaign phase, deterministic tool catalog, and Host-selected model exposure;
 - trusted transport identity, role, actor, and element authorization;
 - campaign and record revisions, branch checks, idempotency, and random-stream
   receipts;
@@ -42,11 +42,12 @@ downtime, and world evolution. `conflict` exists only when the active profile
 declares it and an authorized principal starts an encounter. Ending the
 encounter returns to `play`.
 
-The native tool list is not a fixed superset. Exposure is computed for the MCP
-session from phase, active profile capabilities, campaign membership, actor or
-element authority, and current conflict ownership. Every call repeats the same
-checks. Context-changing operations emit `tools/list_changed`; the host must
-refresh and use the returned `host_context_binding` before the next write.
+For MCP 2026-07-28 the native tool catalog is complete, sorted, and privately
+cacheable. The Host computes the model-visible subset from phase, active profile
+capabilities, campaign membership, actor or element authority, and current
+conflict ownership. Every call repeats the same checks. Legacy connection
+exposure may emit `tools/list_changed`, but it is only a compatibility adapter.
+The Host uses the returned `host_context_binding` before the next write.
 
 Every campaign write includes `campaign_id`, `expected_revision`,
 `expected_branch_id`, and `idempotency_key`. Exact retries return the original
@@ -104,6 +105,7 @@ runtime as one unit.
 ## Deployment boundary
 
 Unbound stdio is a trusted, single-user local mode. Client-supplied principal
-fields are not authentication. A multiplayer deployment must bind one trusted
-principal per MCP process using `SAGASMITH_NARRATIVE_MCP_BOUND_PRINCIPAL_ID`.
-Shared-principal HTTP publication is unsupported.
+fields are not authentication. Hosted HTTP requires a short-lived signed v2
+delegation targeted specifically at `sagasmith-narrative-mcp` on every request.
+Browser tokens and tokens for another audience are never accepted by
+passthrough. A process-bound principal remains available for legacy local kits.

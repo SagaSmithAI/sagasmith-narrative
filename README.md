@@ -13,7 +13,7 @@ and runtime responsibilities separate.
 
 ```text
 packages/domain/                       declarative narrative schemas and validators
-packages/mcp/                          authoritative session and tool runtime
+packages/mcp/                          authoritative request-scoped tool runtime
 skills/                                narrative facilitation procedures
 skills/narrative-project-generator/    profile and Pack authoring procedure
 ```
@@ -30,11 +30,12 @@ and documentation belong here.
 
 ## Verified integration baseline
 
-The current hosted boundary keeps Narrative process-local over stdio while the
-Agent supplies signed `sagasmith.auth-context/v1` principal context and refreshes
-native schemas after `tools/list_changed`. The Local Agent Kit may use either
-stdio or loopback-only Streamable HTTP; both execute the same authoritative
-handlers and contract. Real-Agent integration coverage calls the public MCP
+The hosted boundary targets MCP 2026-07-28. The Agent supplies a short-lived,
+audience-scoped `sagasmith.auth-context/v2` delegation on every request; the
+server never trusts model-selected identity or connection state. Local Agent Kit
+clients may use stdio or Streamable HTTP through the same handlers. A legacy
+initialized/session adapter remains during migration and is not an authority
+boundary. Real-Agent integration coverage calls the public MCP
 facade rather than fabricated internal results. On 2026-08-20
 this revision was included in the rebuilt hosted stack used for the concurrent
 D&D and CoC reference regressions; that stack result validates composition and

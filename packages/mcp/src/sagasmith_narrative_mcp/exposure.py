@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Iterable
 from uuid import uuid4
 
+from mcp.server.mcpserver.exceptions import ToolError
+
 from .policies import CORE_TOOLS, policy_for_tool
 
 
-class ExposureError(ValueError):
+class ExposureError(ToolError):
     pass
 
 
@@ -22,6 +25,7 @@ class Exposure:
     phase: str
     revision: int = 0
     loaded_tools: set[str] = field(default_factory=set)
+    expires_at: float = field(default_factory=lambda: time.monotonic() + 900.0)
 
 
 class ExposureRegistry:
@@ -36,7 +40,22 @@ class ExposureRegistry:
         return value
 
     def active(self, session_key: str) -> Exposure | None:
-        return self._items.get(session_key)
+        value = self._items.get(session_key)
+        if value is not None and value.expires_at <= time.monotonic():
+            self._items.pop(session_key, None)
+            return None
+        return value
+
+    def get(self, handle: str, *, principal_id: str | None = None) -> Exposure:
+        value = next((item for item in self._items.values() if item.id == handle), None)
+        if value is None:
+            raise ExposureError("exposure handle is unknown; open a new exposure")
+        if value.expires_at <= time.monotonic():
+            self._items.pop(value.session_key, None)
+            raise ExposureError("exposure handle expired; open a new exposure")
+        if principal_id is not None and value.principal_id != principal_id:
+            raise ExposureError("exposure handle belongs to another principal")
+        return value
 
     def for_campaign(self, campaign_id: str) -> list[Exposure]:
         return [item for item in self._items.values() if item.campaign_id == campaign_id]
@@ -86,4 +105,5 @@ class ExposureRegistry:
             "phase": exposure.phase,
             "loaded_tools": sorted(exposure.loaded_tools),
             "visible_tools": sorted(ExposureRegistry.visible(exposure)),
+            "ttl_ms": max(0, int((exposure.expires_at - time.monotonic()) * 1000)),
         }

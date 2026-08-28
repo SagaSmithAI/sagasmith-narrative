@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 MAX_RESULT_CHARS = 12_000
-MAX_HITS = 20
 
 
 class SkillCatalog:
@@ -58,20 +57,33 @@ class SkillCatalog:
             truncated = False
         return {"skill_id": skill_id, "section": section, "content": value, "truncated": truncated}
 
-    def search(self, query: str) -> dict[str, Any]:
+    def search(self, query: str, *, limit: int = 20, cursor: str | None = None) -> dict[str, Any]:
         terms = [item.casefold() for item in query.split() if item.strip()]
         if not terms:
             raise ValueError("search query is required")
+        raw_cursor = str(cursor or "").strip()
+        if raw_cursor and (not raw_cursor.startswith("p:") or not raw_cursor[2:].isdigit()):
+            raise ValueError("cursor is invalid; reuse next_cursor from the preceding response")
+        offset = int(raw_cursor[2:]) if raw_cursor else 0
         hits = []
         total_chars = 0
+        matched = 0
         for path in self._files():
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 folded = line.casefold()
                 if not all(term in folded for term in terms):
                     continue
+                if matched < offset:
+                    matched += 1
+                    continue
                 excerpt = line[:500]
-                if total_chars + len(excerpt) > MAX_RESULT_CHARS or len(hits) >= MAX_HITS:
-                    return {"query": query, "hits": hits, "truncated": True}
+                if total_chars + len(excerpt) > MAX_RESULT_CHARS or len(hits) >= limit:
+                    return {
+                        "query": query,
+                        "hits": hits,
+                        "next_cursor": f"p:{offset + len(hits)}",
+                    }
                 hits.append({"skill_id": path.parent.name, "line": number, "excerpt": excerpt})
                 total_chars += len(excerpt)
-        return {"query": query, "hits": hits, "truncated": False}
+                matched += 1
+        return {"query": query, "hits": hits, "next_cursor": None}
