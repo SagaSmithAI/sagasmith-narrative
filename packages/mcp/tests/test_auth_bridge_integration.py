@@ -21,11 +21,11 @@ async def _exercise_bridge(tmp_path: Path) -> None:
     monorepo = root.parents[1]
     workspace = monorepo.parent
     agent_root = workspace / "SagaSmith-agent"
-    agent_python = agent_root / ".venv" / (
-        "Scripts/python.exe" if os.name == "nt" else "bin/python"
+    agent_python = (
+        agent_root / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     )
-    narrative_python = monorepo / ".venv" / (
-        "Scripts/python.exe" if os.name == "nt" else "bin/python"
+    narrative_python = (
+        monorepo / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     )
     if not agent_python.is_file() or not narrative_python.is_file():
         pytest.skip("Agent and Narrative development environments are required")
@@ -98,7 +98,7 @@ async def _exercise_bridge(tmp_path: Path) -> None:
                 "exposure",
                 {"action": "open", "principal_id": "model:forged-owner"},
             )
-            assert not opened.isError
+            assert not opened.is_error
             receipt = opened.content[0].meta["sagasmith_auth_context_receipt"]
             assert receipt["actor_principal"] == "discord:user:alice"
             assert receipt["conversation_principal"] == "discord:group:table-1"
@@ -111,7 +111,7 @@ async def _exercise_bridge(tmp_path: Path) -> None:
                     "add_tool_ids": ["campaign_setup"],
                 },
             )
-            assert not loaded.isError
+            assert not loaded.is_error
             refreshed = {tool.name for tool in (await session.list_tools()).tools}
             assert "campaign_setup" in refreshed
 

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<evaluation>
+  <qa_pair>
+    <question>Traverse every page of completed fixture campaigns and count all matching campaigns. What is the total?</question>
+    <answer>3</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Page through every completed fixture campaign, sort by the authoritative catalog order, and report the alphabetically last campaign name.</question>
+    <answer>Moss Road Seasons</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Filter the campaign catalog for the manor voice archive and resolve its canonical slug. What is it?</question>
+    <answer>echo-manor-voices</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Request the first two completed campaigns in one bounded page. What continuation cursor is issued?</question>
+    <answer>p:2</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Inspect the authoritative protocol capability map. Which mode is declared for MCP 2026-07-28?</question>
+    <answer>request-scoped-primary</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Inspect the private tool-catalog cache policy. What TTL is declared in milliseconds?</question>
+    <answer>300000</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Compare base and optional narrative phases. Which phase exists only in the optional set?</question>
+    <answer>conflict</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Resolve the server capability record and report the authoritative system identifier.</question>
+    <answer>narrative</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Read the complete deterministic public tool catalog and return its alphabetically first tool identifier.</question>
+    <answer>access_change</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Inspect the campaign_query input schema. What is the maximum permitted page size?</question>
+    <answer>100</answer>
+  </qa_pair>
+</evaluation>

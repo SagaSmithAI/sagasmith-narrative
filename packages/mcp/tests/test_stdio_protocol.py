@@ -8,13 +8,13 @@ from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from mcp.types import ServerNotification, ToolListChangedNotification
+from mcp.types import ToolListChangedNotification
 
 from sagasmith_narrative_mcp.policies import CORE_TOOLS
 
 
 def value(result):
-    assert not result.isError, result.content
+    assert not result.is_error, result.content
     return json.loads(result.content[0].text)
 
 
@@ -26,9 +26,8 @@ async def _exercise_stdio(tmp_path: Path) -> None:
     notifications: list[str] = []
 
     async def handler(message):
-        if isinstance(message, ServerNotification) and isinstance(
-            message.root, ToolListChangedNotification
-        ):
+        notification = getattr(message, "root", message)
+        if isinstance(notification, ToolListChangedNotification):
             notifications.append("tools/list_changed")
 
     env = dict(os.environ)
@@ -53,7 +52,7 @@ async def _exercise_stdio(tmp_path: Path) -> None:
             )
             capabilities = value(await session.call_tool("server_capabilities", {}))
             assert capabilities["authoritative_contract"]["schema"] == (
-                "sagasmith.authoritative-mcp/v1"
+                "sagasmith.authoritative-mcp/v2"
             )
             assert capabilities["authoritative_contract"]["transports"] == [
                 "stdio",

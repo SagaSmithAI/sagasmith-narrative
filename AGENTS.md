@@ -6,8 +6,8 @@ This is the current vertical source repository for system-neutral long-form
 narrative play:
 
 - `packages/domain` owns deterministic declarative schemas and validators.
-- `packages/mcp` owns authoritative state, authorization, phases, revisions,
-  random streams, idempotency, settlement, and session-scoped tool exposure.
+- `packages/mcp` owns authoritative state, per-request authorization, phases,
+  revisions, random streams, idempotency, settlement, and the stable tool catalog.
 - `skills` owns reusable facilitation, semantic review, continuity, dialogue,
   and profile/Pack authoring procedures.
 
@@ -25,8 +25,9 @@ fallbacks, or documentation authorities.
   indispensable evidence, or mechanically required data.
 - Preserve isolated per-NPC dialogue workers and publish only explicitly
   settled audience-safe results.
-- Preserve one dynamic MCP-first protocol; never add fixed tool supersets,
-  direct database writes, text simulations, or silent fallbacks.
+- Target MCP 2026-07-28 with a deterministic catalog and Host-selected model
+  subset. Keep the initialized/session path only as an explicit migration
+  adapter; never add direct database writes, text simulations, or silent fallbacks.
 
 ## Validation
 

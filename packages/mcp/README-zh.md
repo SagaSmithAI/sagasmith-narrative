@@ -1,0 +1,44 @@
+# SagaSmith Narrative MCP
+
+[English](README.md) · [协议兼容、升级与回滚](docs/protocol-compatibility.md)
+
+SagaSmith Narrative MCP 是长篇桌面叙事的 system-neutral 权威服务。它负责
+campaign、actor、phase、revision、idempotency、随机流、原子结算与私有 NPC
+conversation；Host/Agent 负责 LLM、上下文聚合、工具选择与受众决策。
+
+## MCP 2026-07-28
+
+- modern `tools/list` 完整、确定排序，并以 private scope 缓存 300 秒；Host 只把
+  当前 system、phase 与任务需要的少量 facade/workflow tools 提供给模型。
+- `exposure(search)` 支持过滤、limit 与 cursor；其显式 handle 有 owner 和 TTL，
+  只记录导航选择，不是 capability，也不代替任何权限检查。
+- Hosted 请求必须携带面向 `sagasmith-narrative-mcp` 的短期
+  `sagasmith.auth-context/v2` 签名委托。服务端逐请求验证 requester、resource owner、
+  acting host/character、allowed operations、audience、room turn、base revision 与 expiry。
+- 禁止透传浏览器 token 或其他 audience 的 token。HTTP 连接可以复用，但不能缓存
+  principal/campaign/session 权威状态。
+- legacy initialize、连接 exposure 与 `tools/list_changed` 仅保留在迁移适配器。
+
+## 本地与 Hosted
+
+本地默认使用 stdio；Streamable HTTP 与 stdio 调用相同 handler/schema/authority。
+非 loopback HTTP 必须配置 `SAGASMITH_AUTH_CONTEXT_SECRET`。常用启动方式：
+
+```powershell
+uv sync --all-packages --all-extras
+$env:SAGASMITH_NARRATIVE_MCP_TRANSPORT = "streamable-http"
+$env:SAGASMITH_NARRATIVE_MCP_HTTP_HOST = "127.0.0.1"
+$env:SAGASMITH_NARRATIVE_MCP_HTTP_PORT = "8770"
+uv run sagasmith-narrative-mcp
+```
+
+## 验证
+
+```powershell
+uv run ruff check packages/domain packages/mcp
+uv run pytest packages/domain/tests packages/mcp/tests
+uv run python packages/mcp/scripts/regression_parallel_campaigns.py --output .runs/parallel
+```
+
+三个自有 fixture、10 项稳定只读 evaluation，以及 legacy/modern、stdio/HTTP、权限、
+幂等、stale revision、并发与恢复测试都不依赖生产数据或付费服务。

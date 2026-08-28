@@ -1,6 +1,8 @@
 # SagaSmith Narrative MCP
 
-[Website](https://sagasmithai.github.io) · [Platform overview](https://github.com/SagaSmithAI/.github/blob/main/profile/README.md) · [SagaSmith Web](https://github.com/SagaSmithAI/SagaSmith-service) · [Content catalog](https://github.com/SagaSmithAI/SagaSmith-dnd-content-library)
+[中文说明](README-zh.md)
+
+[Website](https://sagasmithai.github.io) · [Platform overview](https://github.com/SagaSmithAI/.github/blob/main/profile/README.md) · [SagaSmith Web](https://github.com/SagaSmithAI/SagaSmith-Web) · [Content catalog](https://github.com/SagaSmithAI/SagaSmith-dnd-content-library)
 
 > Current source: `sagasmith-narrative/packages/mcp`. It is released from the Narrative vertical monorepo with its Domain and Skills contracts.
 
@@ -9,8 +11,12 @@ depends on `sagasmith-core` for durable campaigns, transactions, revisions,
 documents, continuity ledgers, snapshots, and branches.
 
 The base runtime has two phases: `lobby` and `play`. A profile may opt into an
-authoritative `conflict` phase. Native MCP tools are session-scoped and dynamic;
-hosts must process `tools/list_changed` notifications.
+authoritative `conflict` phase. On MCP 2026-07-28, `tools/list` is complete,
+sorted and privately cacheable for 300 seconds. The Host selects a phase- and
+task-appropriate subset for the model; every call still revalidates role, phase,
+campaign and revision. `exposure` returns an expiring navigation handle and
+never grants authority. Legacy connection exposure and `tools/list_changed`
+remain only in the migration adapter.
 
 The server never guesses rules from prose. A campaign binds an immutable profile
 version and checksum. Profiles may use Level 0 (explicit Agent/human rulings) or
@@ -71,10 +77,10 @@ sagasmith-narrative-mcp
 ```
 
 Both transports expose identical tool schemas, errors, revisions, idempotency,
-and authority behavior. Streamable HTTP is for clients on the same machine; it
-is rejected when configured with a non-loopback bind address. Hosted or
-multi-user callers must continue to supply a trusted principal-scoped auth
-adapter rather than publishing this local endpoint.
+and authority behavior. Non-loopback Streamable HTTP requires
+`SAGASMITH_AUTH_CONTEXT_SECRET` and a dedicated, audience-scoped Host delegation
+on every request. Browser or unrelated-audience bearer tokens must never be
+passed through to the MCP.
 
 Its independent default home is
 `~/.sagasmith/narrative-mcp`. Set `SAGASMITH_NARRATIVE_MCP_HOME` to relocate it,
@@ -85,9 +91,10 @@ one principal.
 The server applies Core Alembic migrations at startup and requires the current
 Snapshot schema v8. Before deployment, stop the server and take a consistent
 backup of the SQLite database (including a settled WAL), or use the external
-database's native backup mechanism. There is no database downgrade or
-dual-protocol mode: rollback restores the database together with matching Core
-and MCP versions as one unit.
+database's native backup mechanism. Protocol rollback selects the documented
+legacy adapter; data rollback still restores the database together with matching
+Core and MCP versions as one unit. See
+[Protocol compatibility](docs/protocol-compatibility.md).
 
 Without `SAGASMITH_NARRATIVE_MCP_BOUND_PRINCIPAL_ID`, stdio and loopback HTTP
 are trusted single-user local modes; model-supplied principal fields are not

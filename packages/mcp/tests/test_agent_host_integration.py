@@ -40,8 +40,8 @@ async def _exercise_agent_host(tmp_path: Path) -> None:
             ),
         }
         registry = ToolRegistry()
-        narrative_python = monorepo / ".venv" / (
-            "Scripts/python.exe" if os.name == "nt" else "bin/python"
+        narrative_python = (
+            monorepo / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         )
         assert narrative_python.is_file(), "install Narrative MCP dev environment first"
         connections = await connect_mcp_servers(
@@ -89,9 +89,7 @@ async def _exercise_agent_host(tmp_path: Path) -> None:
                 reopened = await exposure.execute(action="open")
                 assert not reopened.is_error, str(reopened)
                 assert reopened.audit_receipt["actor_principal"] == "discord:user:member-2"
-                assert reopened.audit_receipt["conversation_principal"] == (
-                    "discord:group:table-1"
-                )
+                assert reopened.audit_receipt["conversation_principal"] == ("discord:group:table-1")
                 assert "mcp_narrative_campaign_setup" not in registry.tool_names
                 await exposure.execute(action="set", add_tool_ids=["campaign_setup"])
             assert "mcp_narrative_campaign_setup" in registry.tool_names

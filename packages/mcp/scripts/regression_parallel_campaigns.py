@@ -36,7 +36,7 @@ SKILLS = ROOT.parents[1] / "skills"
 
 
 def decode(result: Any) -> dict[str, Any]:
-    if result.isError:
+    if result.is_error:
         message = " ".join(str(getattr(item, "text", item)) for item in result.content)
         raise RuntimeError(message)
     return json.loads(result.content[0].text)
@@ -937,7 +937,7 @@ async def run_fixture(fixture_path: Path, output_root: Path) -> dict[str, Any]:
 
     async def handler(message: Any) -> None:
         if isinstance(message, ServerNotification) and isinstance(
-            message.root, ToolListChangedNotification
+            getattr(message, "root", message), ToolListChangedNotification
         ):
             notification_counter[0] += 1
 
@@ -1012,8 +1012,7 @@ async def main_async(output: Path) -> list[dict[str, Any]]:
     moss = by_fixture["moss-road-seasons"]
     echo = by_fixture["echo-manor-voices"]
     serialized_timelines = {
-        fixture_id: json.dumps(item["tool_timeline"])
-        for fixture_id, item in by_fixture.items()
+        fixture_id: json.dumps(item["tool_timeline"]) for fixture_id, item in by_fixture.items()
     }
     parallel_checks = [
         distinct_campaigns,

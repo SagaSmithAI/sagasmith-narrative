@@ -11,13 +11,13 @@ requires-python = ">=3.11"
 license = "Apache-2.0"
 authors = [{ name = "SagaSmithAI" }]
 dependencies = [
-    "mcp>=1.26.0,<2.0.0",
+    "mcp>=2.1.1,<3.0.0",
     "sagasmith-core>=0.2.0,<0.3.0",
     "sagasmith-narrative>=0.1.0,<0.2.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=9.0.0,<10.0.0", "ruff>=0.1.0"]
+dev = ["pytest>=9.0.0,<10.0.0", "pytest-asyncio>=1.0.0,<2.0.0", "ruff>=0.1.0"]
 
 [project.scripts]
 sagasmith-narrative-mcp = "sagasmith_narrative_mcp.server:main"
