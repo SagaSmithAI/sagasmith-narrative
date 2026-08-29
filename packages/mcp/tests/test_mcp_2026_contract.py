@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
+from mcp import Client
 from mcp.server.mcpserver import Context
 from sagasmith_core.auth_context import (
     AUTH_CONTEXT_DELEGATION_SCHEMA,
@@ -278,5 +279,48 @@ def test_campaign_query_is_filtered_and_bounded(tmp_path: Path) -> None:
         ).structured_content
         assert len(second["campaigns"]) == 1
         assert second["next_cursor"] is None
+
+    asyncio.run(exercise())
+
+
+def test_state_revision_is_filtered_paginated_and_schema_validated(tmp_path: Path) -> None:
+    async def exercise() -> None:
+        server = create_server(
+            McpConfig(database_url=sqlite_database_url(tmp_path / "revision-pagination.db"))
+        )
+        campaign = server.runtime.campaign_create(
+            name="Revision Chronicle",
+            principal_id="system:local",
+            idempotency_key="revision-campaign",
+        )
+        for index in range(3):
+            server.runtime.actor_create(
+                campaign["id"],
+                principal_id="system:local",
+                idempotency_key=f"revision-actor-{index}",
+                actor={"name": f"Revision Actor {index}", "type": "npc"},
+            )
+
+        async with Client(server, mode="2026-07-28") as client:
+            first = await client.call_tool(
+                "state_revision",
+                {"campaign_id": campaign["id"], "action": "list", "limit": 1},
+            )
+            assert not first.is_error, first.structured_content
+            assert len(first.structured_content["revisions"]) == 1
+            assert first.structured_content["next_cursor"] == "p:1"
+
+            second = await client.call_tool(
+                "state_revision",
+                {
+                    "campaign_id": campaign["id"],
+                    "action": "list",
+                    "query": "actor",
+                    "limit": 1,
+                    "cursor": first.structured_content["next_cursor"],
+                },
+            )
+            assert not second.is_error
+            assert len(second.structured_content["revisions"]) <= 1
 
     asyncio.run(exercise())
