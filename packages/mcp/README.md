@@ -13,8 +13,9 @@ documents, continuity ledgers, snapshots, and branches.
 The base runtime has two phases: `lobby` and `play`. A profile may opt into an
 authoritative `conflict` phase. On MCP 2026-07-28, `tools/list` is complete,
 sorted and privately cacheable for 300 seconds. The Host selects a phase- and
-task-appropriate subset for the model; every call still revalidates role, phase,
-campaign and revision. `exposure` returns an expiring navigation handle and
+task-appropriate subset for the model (SagaSmith defaults to at most 16 tools);
+every call still revalidates role, phase, campaign, and revision. Sixteen is a
+Host accuracy policy, not a protocol limit. `exposure` returns an expiring navigation handle and
 never grants authority. Legacy connection exposure and `tools/list_changed`
 remain only in the migration adapter.
 
@@ -27,6 +28,15 @@ methods/tools and schema-level request failures remain protocol concerns. The
 contract suite exercises legacy and 2026-07-28 clients over both stdio and real
 Streamable HTTP, while the three full campaign fixtures validate returned data
 against the advertised schemas.
+
+Modern requests carry protocol version, client capabilities, trace context, and
+a target-specific `sagasmith.auth-context/v2` delegation in `_meta`; optional
+`server/discover` and method/name HTTP routing do not create a hidden session.
+The requester authorizes the operation, the acting Host is audited separately,
+and model-authored identity is overwritten. This MCP does not advertise the MCP
+Tasks extension: its public tools are bounded synchronous operations. A future
+truly long-running import or render must negotiate Tasks explicitly rather than
+turning ordinary writes into background work.
 
 The server never guesses rules from prose. A campaign binds an immutable profile
 version and checksum. Profiles may use Level 0 (explicit Agent/human rulings) or
@@ -68,6 +78,13 @@ each principal, executes every declared route step, follows a focused alternate
 branch, and emits machine-readable per-campaign timelines and a combined
 summary. A non-zero exit means the run is not accepted.
 
+`evaluations/read_only.xml` contains ten independent, complex, stable, and
+actually solved read-only evaluations. The suite also validates deterministic
+catalogs, private cache scopes, request identity isolation, bounded pagination,
+schemas, structured errors, trace propagation, idempotency, stale revisions,
+concurrency, cancellation boundaries, and restart recovery without production
+data or paid services.
+
 The Agent Host integration uses the Narrative workspace and Agent repository environments: the
 test process runs with `../SagaSmith-agent/.venv/Scripts/python.exe`, while the
 spawned MCP server runs with this repository's `.venv/Scripts/python.exe`:
@@ -96,7 +113,11 @@ Its independent default home is
 `~/.sagasmith/narrative-mcp`. Set `SAGASMITH_NARRATIVE_MCP_HOME` to relocate it,
 `SAGASMITH_NARRATIVE_MCP_DATABASE_URL` to use an explicit database, and
 `SAGASMITH_NARRATIVE_MCP_BOUND_PRINCIPAL_ID` when the transport authenticates
-one principal.
+one principal. `SAGASMITH_NARRATIVE_MCP_HTTP_PATH` changes the default `/mcp`
+path. Modern requests propagate `traceparent`, `tracestate`, and `baggage`;
+transport, discover/initialize, catalog/exposure, tool, and projection metrics
+must keep low-cardinality labels and never label by user, campaign, run, or
+arguments.
 
 The server applies Core Alembic migrations at startup and requires the current
 Snapshot schema v8. Before deployment, stop the server and take a consistent

@@ -4,4 +4,6 @@
 
 主路线包含 15 个等价会话。每名 NPC 至少经历三次隔离对话，从戒备、受压到作出承诺；每个私有 proposal 都必须引用该角色的动机材料和关系史，公开台词必须保留声明的声线标记但不得泄露私密 token。中途信念转变必须匹配 Pack 声明的允许边并携带因果事件，人物阶段不能倒退。
 
-Pack 同时覆盖 ActorKnowledge 隔离、关系弧、秘密的同意式披露、snapshot/branch 双结局、observer 拒绝和真实 stdio 动态工具刷新。所有文本与角色均为本仓原创，采用 Apache-2.0。
+Pack 同时覆盖 ActorKnowledge 隔离、关系弧、秘密的同意式披露、snapshot/branch 双结局、
+observer 拒绝，以及真实 stdio 下稳定目录与 Host facade 刷新；legacy exposure/list_changed
+适配器由独立契约测试验证。所有文本与角色均为本仓原创，采用 Apache-2.0。
