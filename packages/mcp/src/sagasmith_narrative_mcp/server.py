@@ -594,7 +594,15 @@ class RequestScopedMCPServer(MCPServer):
             if policy and policy.admin_only:
                 self.runtime.access.require_campaign(
                     campaign_arg,
-                    str(arguments.get("principal_id") or arguments.get("by_principal_id") or ""),
+                    str(
+                        arguments.get("principal_id")
+                        or arguments.get("by_principal_id")
+                        or (
+                            auth_context.authorization_principal
+                            if auth_context is not None
+                            else LOCAL_SYSTEM_PRINCIPAL_ID
+                        )
+                    ),
                     roles=ADMIN_ROLES,
                 )
             try:
@@ -626,7 +634,17 @@ class RequestScopedMCPServer(MCPServer):
             if session_key is not None:
                 await self._refresh(campaign_id)
             principal = (
-                exposure.principal_id if exposure else str(arguments.get("principal_id") or "")
+                exposure.principal_id
+                if exposure
+                else str(
+                    arguments.get("principal_id")
+                    or arguments.get("by_principal_id")
+                    or (
+                        auth_context.authorization_principal
+                        if auth_context is not None
+                        else LOCAL_SYSTEM_PRINCIPAL_ID
+                    )
+                )
             )
             binding = self.runtime.binding(campaign_id, principal)
             current = self.registry.active(session_key) if session_key is not None else None
@@ -1107,6 +1125,7 @@ def create_server(config: McpConfig | None = None) -> MCPServer:
     def continuity_query(
         campaign_id: str,
         actor_id: str | None = None,
+        query: SearchText = "",
         limit: PageLimit = 50,
         principal_id: str = LOCAL_SYSTEM_PRINCIPAL_ID,
     ) -> dict[str, Any]:
@@ -1124,7 +1143,11 @@ def create_server(config: McpConfig | None = None) -> MCPServer:
             "dm" if runtime._has_facilitator_authority(document, membership.role) else "player"
         )
         return runtime.continuity.context(
-            campaign_id, actor_id=actor_id, audience=audience, limit=limit
+            campaign_id,
+            query=query,
+            actor_id=actor_id,
+            audience=audience,
+            limit=limit,
         )
 
     @mcp.tool()
@@ -1438,14 +1461,24 @@ def create_server(config: McpConfig | None = None) -> MCPServer:
     def state_revision(
         campaign_id: str,
         action: Literal["list"],
-        limit: PageLimit = 100,
         principal_id: str = LOCAL_SYSTEM_PRINCIPAL_ID,
+        query: SearchText = "",
+        limit: PageLimit = 100,
+        cursor: PageCursor = None,
     ) -> dict[str, Any]:
         runtime.access.require_campaign(campaign_id, principal_id, roles=ADMIN_ROLES)
-        return {
-            "revisions": [
-                asdict(item) for item in runtime.revisions.history(campaign_id, limit=limit)
+        terms = [term.casefold() for term in query.split() if term.strip()]
+        values = [asdict(item) for item in runtime.revisions.history(campaign_id, limit=500)]
+        if terms:
+            values = [
+                item
+                for item in values
+                if all(term in json.dumps(item, sort_keys=True).casefold() for term in terms)
             ]
+        page, next_cursor = _bounded_page(values, limit=limit, cursor=cursor)
+        return {
+            "revisions": page,
+            "next_cursor": next_cursor,
         }
 
     for registered_tool in mcp._tool_manager.list_tools():
