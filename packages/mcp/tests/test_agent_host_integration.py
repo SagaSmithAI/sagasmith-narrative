@@ -73,7 +73,7 @@ async def _exercise_agent_host(tmp_path: Path) -> None:
             assert exposure is not None
             initial_names = tuple(registry.tool_names)
             if modern_agent:
-                assert len(initial_names) == 29
+                assert len(initial_names) == 31
                 assert tuple(sorted(initial_names)) == initial_names
                 assert "mcp_narrative_campaign_setup" in initial_names
             else:

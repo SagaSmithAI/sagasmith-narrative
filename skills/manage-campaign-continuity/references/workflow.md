@@ -15,12 +15,22 @@
 ## Workflow
 
 1. Refresh binding and request a bounded `continuity_query`; page or narrow scope rather than blocking on context size.
+   For actor recall, set purpose `actor_memory`, the authorized actor, branch,
+   current references, query, and character budget. Its identity, motivational,
+   semantic, and episodic tracks are projections, not new truth. A query may
+   retrieve relevant older events from the whole selected branch history.
+   Ordinary participants may query only the current readable branch; sibling or
+   historical branch continuity requires campaign-administrator authority.
 2. Separate objective facts, actor knowledge, secrets, rumors, summaries, and inference.
 3. Identify the smallest conflicting claims and their branches/revisions/sources.
 4. Classify the issue: stale projection, evidence conflict, accidental disclosure, missing event, incorrect knowledge, or deliberate canon change.
 5. If sources determine the answer, propose the narrowest source-backed correction. If canon choice remains, request authorized human selection.
 6. Commit a new auditable event/fact/knowledge revision or disclosure through `narrative_change` or atomic `narrative_settle`. An authorized campaign administrator may use `branch_change` action `create`/`checkout` for an explicit alternate timeline. Never rewrite old history silently.
 7. Preserve audience boundaries in diagnostics and repair narration.
+   Actor, group, facilitator, table/public, and private-worker Narrative
+   audiences are authorized before selection and are not interchangeable with
+   Core knowledge scopes. Candidate diagnostics therefore reveal only the
+   already visible set.
 8. Re-query continuity and verify that the contradiction is resolved without erasing legitimate uncertainty.
 
 ## Outputs

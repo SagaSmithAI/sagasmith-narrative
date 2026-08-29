@@ -31,11 +31,16 @@ TOOL_DESCRIPTIONS = {
     "actor_change": "Create or update one actor with optimistic revision and idempotency checks.",
     "scene_change": "Start, update, or end the current narrative scene atomically.",
     "narrative_query": "Read a bounded page or one profile, Pack, scene, or narrative record.",
+    "campaign_design_change": "Advance one declared narrative line with explicit evidence.",
+    "campaign_expansion": "Issue or validate a bounded zero-tool narrative expansion proposal.",
     "narrative_change": "Create or update one profile-defined narrative record.",
     "narrative_settle": "Atomically settle an event, records, facts, knowledge, and snapshot.",
     "continuity_query": "Read bounded, audience-filtered continuity for a campaign or actor.",
     "mechanic_resolve": "Resolve a profile mechanic with a deterministic campaign random receipt.",
-    "npc_conversation": "Open, propose, publish, close, or abort a private NPC conversation.",
+    "npc_conversation": (
+        "Open, claim, refresh, propose, publish, close, or abort a participant-bounded "
+        "private NPC conversation."
+    ),
     "downtime_settle": "Atomically settle profile-enabled downtime and its continuity changes.",
     "world_turn_settle": "Atomically settle a profile-enabled world turn and continuity changes.",
     "conflict_start": "Start the profile-defined authoritative conflict state.",
@@ -64,10 +69,16 @@ PARAMETER_DESCRIPTIONS = {
     "changes": "Profile-defined narrative record changes to settle atomically.",
     "checkout": "Whether a newly created branch becomes the current branch immediately.",
     "conversation_id": "Opaque server-issued NPC conversation handle.",
+    "current_refs": "Bounded authoritative references currently relevant to the actor or scene.",
     "cursor": "Opaque cursor from the preceding response; omit for the first page.",
     "data": "Action-specific bounded data object; nested keys follow the active profile contract.",
     "description": "Human-readable campaign description.",
     "element_ref": "Profile-defined authority element reference.",
+    "entity_id": "Identifier of the declared front, thread, clue, or character arc.",
+    "entity_type": "Declared narrative-line type advanced by this evidence-bound change.",
+    "evidence_refs": (
+        "Authoritative event, scene, record, or fact references supporting the change."
+    ),
     "event": "Authoritative event document to commit during settlement.",
     "expected_actor_revision": "Actor revision that must still be current for an update.",
     "expected_branch_id": "Branch that must still be current before a write commits.",
@@ -82,6 +93,7 @@ PARAMETER_DESCRIPTIONS = {
     "limit": "Maximum records to return; the server rejects values outside 1 through 100.",
     "mechanic_id": "Identifier of a mechanic declared by the active profile.",
     "name": "Human-readable campaign or branch name.",
+    "note": "Optional bounded facilitator note explaining the evidence-bound change.",
     "npc_actor_id": "Actor identifier for the NPC owned by the private conversation.",
     "pack": "Versioned Pack document; content is intentionally profile extensible.",
     "pack_key": "Versioned Pack key in the form selected by the server.",
@@ -91,6 +103,7 @@ PARAMETER_DESCRIPTIONS = {
     "principal_id": "Authenticated requester; hosted calls overwrite model-supplied values.",
     "profile": "Versioned game-profile document with declarative schemas and capabilities.",
     "profile_key": "Versioned profile key in the form selected by the server.",
+    "purpose": "Continuity projection to produce; actor memory requires actor authority.",
     "query": "Case-insensitive filter text; empty text matches all authorized records.",
     "record": "Profile-defined narrative record document.",
     "record_changes": "Bounded create/update operations for profile-defined records.",
@@ -106,7 +119,9 @@ PARAMETER_DESCRIPTIONS = {
     "slug": "Optional stable URL-safe campaign slug.",
     "snapshot": "Optional snapshot request to create during settlement.",
     "summary": "Audience-safe summary of the activity or event.",
+    "status": "Declared target status accepted by the active narrative contract.",
     "target_principal_id": "Principal receiving or losing the requested authority.",
+    "budget_chars": "Maximum character budget for the returned deterministic memory capsule.",
 }
 
 
@@ -117,6 +132,8 @@ _SHORT_TEXT = {
     "campaign_id",
     "conversation_id",
     "element_ref",
+    "entity_id",
+    "entity_type",
     "expected_branch_id",
     "exposure_handle",
     "mechanic_id",
@@ -124,6 +141,7 @@ _SHORT_TEXT = {
     "pack_key",
     "principal_id",
     "profile_key",
+    "purpose",
     "record_id",
     "scene_id",
     "skill_id",
@@ -133,6 +151,8 @@ _COLLECTION_LIMITS = {
     "actor_knowledge": 128,
     "add_tool_ids": 64,
     "changes": 128,
+    "current_refs": 128,
+    "evidence_refs": 128,
     "facts": 128,
     "participants": 128,
     "record_changes": 128,
@@ -397,6 +417,7 @@ def _field_schema(name: str) -> dict[str, Any]:
         "schema_version",
         "slot",
         "ttl_ms",
+        "lease_expires_at_ns",
     }:
         return {"type": "integer", "minimum": 0}
     if name in {
@@ -447,7 +468,14 @@ def _field_schema(name: str) -> dict[str, Any]:
             "additionalProperties": {"type": "string", "maxLength": 8_192},
             "maxProperties": 10_000,
         }
-    if name in {"loaded_tools", "optional_phases", "base_phases", "sections", "visible_tools"}:
+    if name in {
+        "loaded_tools",
+        "optional_phases",
+        "base_phases",
+        "sections",
+        "settlement_route",
+        "visible_tools",
+    }:
         return {
             "type": "array",
             "items": {"type": "string", "maxLength": 8_192},
@@ -494,10 +522,20 @@ def _field_schema(name: str) -> dict[str, Any]:
         return {"anyOf": [{"type": "object", "additionalProperties": True}, {"type": "null"}]}
     if name in {
         "actor",
+        "activation",
+        "actor_memory",
+        "budget",
+        "context",
+        "context_receipt",
+        "constraints",
+        "campaign_design",
+        "change",
         "conversation",
         "finalized",
         "imports",
         "pack",
+        "proposal",
+        "proposal_attestation",
         "publication",
         "record",
         "result",
@@ -505,6 +543,7 @@ def _field_schema(name: str) -> dict[str, Any]:
         "sheet",
         "settings",
         "notes",
+        "worker_contract",
     }:
         return _open_document(
             "Profile-defined extension document validated by the active Narrative contract."
@@ -716,6 +755,20 @@ OUTPUT_FIELDS = {
         "record",
         "scene",
         "status",
+        "campaign_design",
+    },
+    "campaign_design_change": _WRITE_FIELDS | {"campaign_design", "change"},
+    "campaign_expansion": {
+        "schema_version",
+        "status",
+        "context",
+        "context_receipt",
+        "budget",
+        "worker_contract",
+        "proposal",
+        "proposal_attestation",
+        "campaign_design",
+        "settlement_route",
     },
     "narrative_change": _WRITE_FIELDS | {"record"},
     "narrative_settle": _SETTLEMENT_FIELDS,
@@ -731,7 +784,26 @@ OUTPUT_FIELDS = {
     },
     "mechanic_resolve": _WRITE_FIELDS | {"mechanic_id", "result", "random_stream_receipt"},
     "npc_conversation": _WRITE_FIELDS
-    | {"conversation", "conversation_id", "proposal_id", "publication", "status", "publications"},
+    | {
+        "schema_version",
+        "conversation",
+        "conversation_id",
+        "activation",
+        "activation_id",
+        "activation_ref",
+        "actor_runtime_id",
+        "worker_id",
+        "lease_id",
+        "lease_expires_at_ns",
+        "context_receipt",
+        "actor_memory",
+        "constraints",
+        "close_token",
+        "proposal_id",
+        "publication",
+        "status",
+        "publications",
+    },
     "downtime_settle": _SETTLEMENT_FIELDS,
     "world_turn_settle": _SETTLEMENT_FIELDS,
     "conflict_start": _WRITE_FIELDS | {"conflict"},

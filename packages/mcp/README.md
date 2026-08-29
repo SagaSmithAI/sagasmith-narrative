@@ -114,7 +114,15 @@ Its independent default home is
 `SAGASMITH_NARRATIVE_MCP_DATABASE_URL` to use an explicit database, and
 `SAGASMITH_NARRATIVE_MCP_BOUND_PRINCIPAL_ID` when the transport authenticates
 one principal. `SAGASMITH_NARRATIVE_MCP_HTTP_PATH` changes the default `/mcp`
-path. Modern requests propagate `traceparent`, `tracestate`, and `baggage`;
+path. Campaign-expansion attestations use a restart-stable instance key at
+`proposal-signing.key` under that home. Multi-instance deployments must set the
+same `SAGASMITH_NARRATIVE_MCP_PROPOSAL_SECRET` (at least 32 bytes) on every
+replica; when an auth-context secret is configured, it is otherwise used to
+derive a domain-separated proposal key. Programmatic servers using an explicit
+file-backed SQLite URL create an adjacent private key file; remote and in-memory
+databases must supply an auth-context or proposal secret and fail fast otherwise.
+Modern requests propagate `traceparent`,
+`tracestate`, and `baggage`;
 transport, discover/initialize, catalog/exposure, tool, and projection metrics
 must keep low-cardinality labels and never label by user, campaign, run, or
 arguments.

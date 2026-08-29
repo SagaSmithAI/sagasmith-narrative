@@ -11,4 +11,6 @@ Start from branch-scoped authoritative state and the active profile. Ask the Age
 
 Do not make summaries authoritative, run hidden automatic world simulation, or advance every clock merely because time passed. Treat readiness and presentation diagnostics as warnings unless a concrete invariant is at risk.
 
+Maintain fronts, threads, clues, and character arcs through evidence-linked progress changes. Grow new scenes or chapters through validated child Packs; do not silently promote a summary or a zero-tool worker proposal into canonical campaign state.
+
 Refresh context after every settlement, time jump, phase, profile, branch, or restore change.

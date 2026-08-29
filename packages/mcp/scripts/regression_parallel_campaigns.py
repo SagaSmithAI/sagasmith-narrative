@@ -88,7 +88,7 @@ class StdioRouteBackend:
         self.seen_event_ids: set[str] = set()
         self.executed_ids: list[str] = []
         self.element_grants: set[tuple[str, str]] = set()
-        self.conversation_workers: dict[str, str] = {}
+        self.conversation_workers: dict[str, dict[str, Any]] = {}
         self.open_conversations: set[str] = set()
         seed = RouteLoader.reference(document, "campaign-seed.json")
         self.principal_actor_refs = {
@@ -120,6 +120,22 @@ class StdioRouteBackend:
     def principal_id(self, alias: str | None = None) -> str:
         selected = alias or self.current_principal
         return str(self.principals.get(selected, selected))
+
+    def conversation_actor_interlocutors(self, action: Mapping[str, Any]) -> list[str]:
+        conversation_key = str(action.get("save_result_as") or "")
+        if not conversation_key:
+            return []
+        actor_ids: set[str] = set()
+        for session in self.document.data.get("sessions", []):
+            for candidate in session.get("actions", []):
+                if (
+                    candidate.get("tool") != "npc_conversation"
+                    or candidate.get("conversation_from") != conversation_key
+                ):
+                    continue
+                audience = (candidate.get("input") or {}).get("audience") or {}
+                actor_ids.update(str(item) for item in audience.get("actor_ids") or [])
+        return sorted(self.actor_aliases.get(item, item) for item in actor_ids)
 
     async def visible_tools(self) -> set[str]:
         return {item.name for item in (await self.session.list_tools()).tools}
@@ -390,6 +406,13 @@ class StdioRouteBackend:
             args = {"data": value}
         elif tool == "npc_conversation":
             args = {"action": action["action"], "data": deepcopy(action.get("input") or {})}
+            args["data"].pop("private_worker_id", None)
+            if action["action"] == "open":
+                args["data"]["interlocutors"] = {
+                    "actor_ids": self.conversation_actor_interlocutors(action),
+                    "principal_ids": [self.principal_id(selected_principal)],
+                    "publication_scopes": ["public", "table", "group", "actor"],
+                }
             if action.get("npc_actor_id"):
                 args["npc_actor_id"] = action["npc_actor_id"]
             if action.get("conversation_from"):
@@ -398,14 +421,46 @@ class StdioRouteBackend:
                 args["conversation_id"] = conversation.get("id") or conversation.get(
                     "conversation_id"
                 )
-                worker_id = self.conversation_workers.get(str(args["conversation_id"]))
-                if worker_id:
-                    args["data"]["private_worker_id"] = worker_id
+                worker = self.conversation_workers.get(str(args["conversation_id"]))
+                if worker and action["action"] == "propose":
+                    claimed = await self.call(
+                        "npc_conversation",
+                        {
+                            "action": "claim",
+                            "conversation_id": args["conversation_id"],
+                            "data": {"activation_ref": worker["activation_ref"]},
+                        },
+                        principal=selected_principal,
+                        write=True,
+                        remember=False,
+                    )
+                    private_content = str(args["data"].pop("content", ""))
+                    args["data"] = {
+                        "activation_ref": claimed["activation_ref"],
+                        "lease_id": claimed["lease_id"],
+                        "context_receipt": claimed["context_receipt"],
+                        "proposal": {
+                            "schema_version": 1,
+                            "activation_id": claimed["activation_id"],
+                            "actor_runtime_id": claimed["actor_runtime_id"],
+                            "private_intent": private_content or "No private intent declared.",
+                            "utterance_segments": [
+                                {
+                                    "text": "…",
+                                    "content_mode": "nonfactual",
+                                    "basis_refs": [],
+                                }
+                            ],
+                        },
+                    }
+                elif worker and action["action"] in {"close", "abort"}:
+                    args["data"]["close_token"] = worker["close_token"]
             proposal_from = (action.get("input") or {}).get("proposal_id_from")
             if proposal_from:
                 proposal = self.saved[str(proposal_from)]
                 args["data"].pop("proposal_id_from", None)
                 args["data"]["proposal_id"] = proposal.get("proposal_id")
+            args = replace_aliases(args, self.actor_aliases)
         elif tool == "snapshot_change":
             args = {"action": action["action"], **deepcopy(action.get("input") or {})}
             if action.get("label"):
@@ -437,9 +492,11 @@ class StdioRouteBackend:
         if tool == "npc_conversation" and action.get("action") == "open":
             conversation = result.get("conversation") or {}
             conversation_id = str(conversation.get("id") or "")
-            worker_id = str((action.get("input") or {}).get("private_worker_id") or "")
-            if conversation_id and worker_id:
-                self.conversation_workers[conversation_id] = worker_id
+            if conversation_id:
+                self.conversation_workers[conversation_id] = {
+                    "activation_ref": result["activation"]["activation_ref"],
+                    "close_token": result["close_token"],
+                }
             if conversation_id:
                 self.open_conversations.add(conversation_id)
         if tool == "npc_conversation" and action.get("action") in {"close", "abort"}:

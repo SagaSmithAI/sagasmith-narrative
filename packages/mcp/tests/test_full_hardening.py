@@ -380,7 +380,13 @@ def test_scene_authority_and_npc_private_proposal_recovery(tmp_path: Path) -> No
         campaign_id,
         action="open",
         npc_actor_id=npc["id"],
-        data={"private_worker_id": "worker.bound"},
+        data={
+            "reason": "the player addressed the NPC",
+            "interlocutors": {
+                "principal_ids": ["owner"],
+                "publication_scopes": ["public"],
+            },
+        },
         principal_id="owner",
         expected_revision=revision,
         expected_branch_id=branch_id,
@@ -388,15 +394,76 @@ def test_scene_authority_and_npc_private_proposal_recovery(tmp_path: Path) -> No
     )
     conversation_id = opened["conversation"]["id"]
     revision, branch_id = state(rt, campaign_id)
+    claimed = rt.npc_conversation(
+        campaign_id,
+        action="claim",
+        conversation_id=conversation_id,
+        data={"activation_ref": opened["activation"]["activation_ref"]},
+        principal_id="owner",
+        expected_revision=revision,
+        expected_branch_id=branch_id,
+        idempotency_key="npc-claim",
+    )
+    assert claimed["constraints"]["may_call_tools"] is False
+    revision, branch_id = state(rt, campaign_id)
     proposal = rt.npc_conversation(
         campaign_id,
         action="propose",
         conversation_id=conversation_id,
-        data={"private_worker_id": "worker.bound", "content": "private motive"},
+        data={
+            "activation_ref": claimed["activation_ref"],
+            "lease_id": claimed["lease_id"],
+            "context_receipt": claimed["context_receipt"],
+            "proposal": {
+                "schema_version": 1,
+                "activation_id": claimed["activation_id"],
+                "actor_runtime_id": claimed["actor_runtime_id"],
+                "private_intent": "private motive",
+                "utterance_segments": [
+                    {
+                        "text": "A measured reply.",
+                        "content_mode": "nonfactual",
+                        "basis_refs": [],
+                    }
+                ],
+            },
+        },
         principal_id="owner",
         expected_revision=revision,
         expected_branch_id=branch_id,
         idempotency_key="npc-propose",
+    )
+    revision, branch_id = state(rt, campaign_id)
+    with pytest.raises(ValueError, match="published before settlement close"):
+        rt.npc_conversation(
+            campaign_id,
+            action="close",
+            conversation_id=conversation_id,
+            data={
+                "close_token": opened["close_token"],
+                "selected_proposal_ids": [proposal["proposal_id"]],
+                "settlement": {
+                    "event": {
+                        "event_type": "npc.private-rejected",
+                        "summary": "Private worker output must not settle directly.",
+                        "audience_scope": "public",
+                    }
+                },
+            },
+            principal_id="owner",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="npc-close-unpublished",
+        )
+    rt.npc_conversation(
+        campaign_id,
+        action="publish",
+        conversation_id=conversation_id,
+        data={"proposal_id": proposal["proposal_id"], "audience": {"scope": "public"}},
+        principal_id="owner",
+        expected_revision=revision,
+        expected_branch_id=branch_id,
+        idempotency_key="npc-publish",
     )
     revision, branch_id = state(rt, campaign_id)
     closed = rt.npc_conversation(
@@ -404,7 +471,7 @@ def test_scene_authority_and_npc_private_proposal_recovery(tmp_path: Path) -> No
         action="close",
         conversation_id=conversation_id,
         data={
-            "private_worker_id": "worker.bound",
+            "close_token": opened["close_token"],
             "selected_proposal_ids": [proposal["proposal_id"]],
             "settlement": {
                 "event": {
@@ -454,7 +521,13 @@ def test_snapshot_and_branch_changes_are_admin_cas_and_exactly_replayable(
         campaign_id,
         action="open",
         npc_actor_id=npc["id"],
-        data={"private_worker_id": "worker.recovery"},
+        data={
+            "reason": "recovery boundary test",
+            "interlocutors": {
+                "principal_ids": ["owner"],
+                "publication_scopes": ["public"],
+            },
+        },
         principal_id="owner",
         expected_revision=revision,
         expected_branch_id=branch_id,
@@ -485,7 +558,7 @@ def test_snapshot_and_branch_changes_are_admin_cas_and_exactly_replayable(
         campaign_id,
         action="abort",
         conversation_id=opened["conversation"]["id"],
-        data={"private_worker_id": "worker.recovery"},
+        data={"close_token": opened["close_token"]},
         principal_id="owner",
         expected_revision=revision,
         expected_branch_id=branch_id,

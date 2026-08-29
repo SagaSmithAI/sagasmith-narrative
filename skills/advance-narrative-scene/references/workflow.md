@@ -13,10 +13,10 @@
 
 ## Workflow
 
-1. Discover and set Play exposure; re-query the active scene with `narrative_query` and load `actor_query`, `continuity_query`, and the binding.
+1. Confirm the host-selected stable catalog, read Play exposure as guidance, re-query the active scene with `narrative_query`, and load `actor_query`, `continuity_query`, and the binding.
 2. Confirm actor/element authority and identify unresolved human choices. A facilitator-less campaign owner has administrative power only; scene start/update/end requires the caller to be a declared active steward with matching current element grants.
 3. Determine whether the intent needs no mechanic, a declared profile mechanic, or an independent system provider.
-4. Call `mechanic_resolve` only if current exposure includes it and all explicit inputs are known.
+4. Call `mechanic_resolve` only if the stable catalog includes it, current policy permits it, and all explicit inputs are known; exposure alone is not authority.
 5. Construct one settlement proposal: scene transition, objective event, audiences, fact revisions, ActorKnowledge changes, relationships, tracks/resources/tags, threads, commitments, consequences, and source anchors.
 6. Do not infer audience membership; provide explicit audience facts selected by the Agent.
 7. Commit through `narrative_settle` using expected revisions and idempotency. Use `scene_change` actions `start`, `update`, and `end` only for scene lifecycle; include the Pack-declared `active_stewards` and verify each stewarded element against MCP grants.

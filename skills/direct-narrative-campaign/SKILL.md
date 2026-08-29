@@ -11,4 +11,6 @@ Recover current campaign context before narration. Ask for unresolved human inte
 
 Never invent an MCP result, random receipt, permission, or source fact. Do not treat public narration as a state write. Close or abort isolated NPC conversations before a mechanic, scene mutation, branch change, or optional Conflict makes their context stale.
 
+When play reasonably leaves the current Atlas, use the bounded campaign-expansion proposal flow. This applies both to emergent seeds and to authored campaigns: validate evidence and lineage, then activate a new child Pack before treating the location, scene, plot development, or character as canonical.
+
 Refresh exposure after every context-changing result or notification.

@@ -12,11 +12,19 @@ and endings. Decide which artifacts are required:
 - Module Packs for runnable scene structures;
 - Campaign Seed Packs for portable initial logical state.
 
+For a runnable long-form project, select a runtime mode deliberately. An
+authored root may be played as written or extended through child episodes; an
+emergent seed starts from a bounded setting and initial scenes. In both cases,
+put schema-version-1 runtime metadata in `content.runtime_manifest`, require one
+generation-zero root, and model fronts, threads, clues, and character arcs with
+evidence references. Player-character arcs describe opportunities rather than
+fixed outcomes.
+
 Never treat a live campaign backup as a distributable Pack.
 
 ## Build the profile first
 
-1. Discover Lobby authoring tools with `server_capabilities` and `exposure`.
+1. Confirm Lobby authoring support in the host-selected stable catalog with `server_capabilities`; use `exposure` as current guidance only.
 2. Create or resume an MCP-owned profile draft through `profile_change`.
 3. Declare identity, actor schema, authority/audience rules, record extensions,
    and only supported Level 0/1 mechanics. Level 1 supports bounded dice pools,
@@ -40,6 +48,11 @@ Never treat a live campaign backup as a distributable Pack.
 5. Confirm the distribution decision independently from private-use validity.
 6. Finalize explicitly. Import inactive and activate only when separately
    authorized against fresh authoritative context.
+7. Do not pre-author every possible detour. During play, reasonable off-Atlas
+   and emergent additions are proposed from a signed `campaign_expansion`
+   context by a bounded zero-tool worker, validated and attested by MCP, and
+   persisted only through a new child Pack whose checksummed parent dependency
+   and unchanged manifest pass create/finalize/import/activate verification.
 
 ## Write discipline and recovery
 

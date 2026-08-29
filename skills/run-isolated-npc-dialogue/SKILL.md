@@ -7,8 +7,8 @@ description: Run, continue, publish, close, or abort a persistent per-NPC isolat
 
 Read [the isolation and settlement contract](references/workflow.md) before acting.
 
-Activate exactly one authorized NPC worker context, keep private context and raw proposals out of the Director session, and publish only MCP-approved audience output. Treat worker text as a proposal until the MCP closes the conversation and atomically accepts selected events, knowledge, relationships, or commitments.
+Open only an NPC for which the caller has both control and private access, declare its actor/principal interlocutors and permitted publication scopes, then claim the server-issued activation and lease in exactly one persistent zero-tool worker. Keep private context and raw proposals out of the Director session, and publish only MCP-approved participant-bounded output. PC workers are forbidden.
 
 Close or abort before any mechanic, scene mutation, phase/Conflict transition, branch change, restore, role change, or actor-grant change invalidates activation.
 
-On stale activation, do not reconstruct private state from memory; reset and reactivate from authoritative context.
+On actor-local context change, use `refresh` and move the worker to the replacement activation, which preserves its reason and cursors. The old activation is invalid. On broader campaign staleness, abort from current authority and reopen; never reconstruct private state from Director memory.

@@ -95,7 +95,7 @@ def test_real_protocol_era_transport_matrix(tmp_path: Path, transport: str, mode
             if mode == "2026-07-28":
                 assert client.protocol_version == "2026-07-28"
                 assert names == sorted(names)
-                assert len(names) == 29
+                assert len(names) == 31
                 assert listed.ttl_ms == 300_000
                 assert listed.cache_scope == "private"
                 assert listed.meta["io.modelcontextprotocol/serverInfo"]["name"] == (

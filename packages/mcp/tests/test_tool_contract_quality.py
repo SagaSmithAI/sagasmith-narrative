@@ -63,7 +63,7 @@ def _assert_precise_output_schema(tool_name: str, schema: dict[str, Any]) -> Non
 def test_every_public_tool_has_a_bounded_described_precise_contract(tmp_path: Path) -> None:
     async def exercise() -> None:
         tools = await _server(tmp_path).list_tools()
-        assert len(tools) == 29
+        assert len(tools) == 31
         for tool in tools:
             assert (tool.description or "").strip(), f"{tool.name} has no description"
             for name, schema in (tool.input_schema.get("properties") or {}).items():
