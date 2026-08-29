@@ -276,12 +276,17 @@ class RequestScopedMCPServer(MCPServer):
                 if isinstance(metadata, Mapping)
                 else getattr(metadata, AUTH_CONTEXT_META_KEY, None)
             )
-            supplied_actor = str(arguments.get(principal_argument) or "").strip()
+            supplied_principal = str(arguments.get(principal_argument) or "").strip()
             verified = verify_auth_context(envelope, self._auth_context_secret)
             modern = verified.schema == "sagasmith.auth-context/v2"
-            if not modern and not supplied_actor:
+            if not modern and not supplied_principal:
                 raise ValueError("tool caller principal is required")
-            arguments[principal_argument] = verified.actor_principal
+            # Modern authorization follows the signed requester. The separately
+            # signed acting Host remains the authoritative actor retained by the
+            # audit receipt. Legacy callers keep their exact actor binding.
+            arguments[principal_argument] = (
+                verified.authorization_principal if modern else verified.actor_principal
+            )
             expected_campaign = self._argument_campaign_id(arguments)
             if (
                 not expected_campaign
@@ -297,7 +302,9 @@ class RequestScopedMCPServer(MCPServer):
             verified = verify_auth_context(
                 envelope,
                 self._auth_context_secret,
-                expected_actor=verified.actor_principal if modern else supplied_actor,
+                expected_actor=(
+                    verified.authority_principal if modern else supplied_principal
+                ),
                 expected_campaign=expected_campaign or None,
                 expected_service="sagasmith-narrative-mcp" if modern else None,
                 expected_operation=name if modern else None,
@@ -317,6 +324,9 @@ class RequestScopedMCPServer(MCPServer):
                     str(arguments["acting_character_id"]).strip()
                     if modern and arguments.get("acting_character_id")
                     else None
+                ),
+                expected_requester=(
+                    verified.authorization_principal if modern else None
                 ),
             )
         except ValueError as exc:
