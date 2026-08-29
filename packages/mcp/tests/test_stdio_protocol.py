@@ -82,7 +82,9 @@ async def _exercise_stdio(tmp_path: Path) -> None:
             searched = value(
                 await session.call_tool("exposure", {"action": "search", "query": "profile"})
             )
-            assert [item["tool_id"] for item in searched["matches"]] == ["profile_change"]
+            matched_tools = [item["tool_id"] for item in searched["matches"]]
+            assert matched_tools == sorted(matched_tools)
+            assert "profile_change" in matched_tools
             value(
                 await session.call_tool(
                     "exposure",

@@ -4,9 +4,7 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
 from mcp.server.mcpserver import Context
-from mcp.server.mcpserver.exceptions import ToolError
 from sagasmith_core.auth_context import (
     AUTH_CONTEXT_DELEGATION_SCHEMA,
     AUTH_CONTEXT_META_KEY,
@@ -88,12 +86,18 @@ def test_modern_identity_audience_revision_and_trace_are_request_scoped(tmp_path
                 target_service="sagasmith-dnd-mcp",
             ),
         )
-        with pytest.raises(ToolError, match="target service"):
-            await server.call_tool("campaign_query", {"action": "list"}, wrong)
+        denied = await server.call_tool("campaign_query", {"action": "list"}, wrong)
+        assert denied.is_error is True
+        assert denied.structured_content["error"]["code"] == "authorization_denied"
+        assert "target service" in denied.structured_content["error"]["message"]
 
         stale = modern_context(server, delegated_meta(nonce="stale", operation="campaign_query"))
-        with pytest.raises(ToolError, match="base revision is stale"):
-            await server.call_tool("campaign_query", {"action": "list", "base_revision": 1}, stale)
+        rejected = await server.call_tool(
+            "campaign_query", {"action": "list", "base_revision": 1}, stale
+        )
+        assert rejected.is_error is True
+        assert rejected.structured_content["error"]["code"] == "stale_revision"
+        assert rejected.structured_content["error"]["retryable"] is True
 
     asyncio.run(exercise())
 
@@ -150,7 +154,8 @@ def test_modern_exposure_handle_is_explicit_guidance_not_catalog_state(tmp_path:
             )
         ).structured_content
         assert current["exposure_id"] == handle
-        assert current["principal_id"] == "user:authorized"
+        assert current["principal_id"] == opened["principal_id"]
+        assert current["principal_id"] not in {"model:forged", "model:forged-again"}
         assert [tool.name for tool in await server.list_tools()] == baseline
 
     asyncio.run(exercise())

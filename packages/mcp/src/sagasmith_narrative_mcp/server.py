@@ -43,6 +43,11 @@ from .exposure import Exposure, ExposureError, ExposureRegistry
 from .policies import ADMIN_TOOLS, CORE_TOOLS, allowed_tools, policy_for_tool
 from .runtime import ADMIN_ROLES, NarrativeRuntime
 from .skills import SkillCatalog
+from .tool_contracts import (
+    PublicContractValidationError,
+    apply_public_contract,
+    validate_public_arguments,
+)
 
 PageLimit = Annotated[int, Field(ge=1, le=100, description="Maximum records to return.")]
 PageCursor = Annotated[
@@ -440,6 +445,52 @@ class RequestScopedMCPServer(MCPServer):
         ]
 
     @staticmethod
+    def _structured_tool_error(message: str) -> CallToolResult:
+        """Return a safe, model-repairable execution error.
+
+        Unknown methods, unknown tools, and JSON-schema validation remain protocol
+        errors in the SDK.  This shape is only for failures reached while executing
+        a known tool.
+        """
+
+        text = message.strip() or "The tool request was rejected."
+        lowered = text.casefold()
+        retryable = any(
+            marker in lowered for marker in ("stale", "expired", "timeout", "temporar", "conflict")
+        )
+        if "revision" in lowered and any(marker in lowered for marker in ("stale", "conflict")):
+            code = "stale_revision"
+        elif "expired" in lowered and any(
+            marker in lowered for marker in ("handle", "exposure", "conversation")
+        ):
+            code = "expired_handle"
+        elif any(
+            marker in lowered for marker in ("auth", "principal", "permission", "access", "role")
+        ):
+            code = "authorization_denied"
+        elif isinstance(message, str) and "not found" in lowered:
+            code = "not_found"
+        else:
+            code = "invalid_request"
+        recovery = (
+            "Refresh the authoritative revision or handle and retry with the same idempotency key."
+            if retryable
+            else "Correct the tool arguments before retrying."
+        )
+        return CallToolResult(
+            is_error=True,
+            content=[TextContent(type="text", text=text)],
+            structured_content={
+                "error": {
+                    "code": code,
+                    "message": text,
+                    "retryable": retryable,
+                    "recovery": recovery,
+                }
+            },
+        )
+
+    @staticmethod
     def _attach_trace_context(result: Any, context: Context | None) -> Any:
         if not isinstance(result, CallToolResult) or context is None:
             return result
@@ -457,8 +508,39 @@ class RequestScopedMCPServer(MCPServer):
         metadata["sagasmith_trace_context"] = propagated
         return result.model_copy(update={"meta": metadata})
 
-    async def call_tool(self, name: str, arguments: dict[str, Any], context: Context | None = None):  # type: ignore[override]
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        context: Context | None = None,
+    ):  # type: ignore[override]
+        try:
+            return await self._call_tool_impl(name, arguments, context)
+        except ToolError as exc:
+            if context is None:
+                raise
+            message = str(exc)
+            if message.startswith("Unknown tool") or "validation error" in message.casefold():
+                raise
+            return self._structured_tool_error(message)
+        except (ExposureError, LookupError, PermissionError, ValueError) as exc:
+            if context is None:
+                raise
+            return self._structured_tool_error(str(exc))
+
+    async def _call_tool_impl(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        context: Context | None = None,
+    ):
         arguments = dict(arguments or {})
+        registered_tool = self._tool_manager.get_tool(name)
+        if registered_tool is not None:
+            try:
+                validate_public_arguments(registered_tool, arguments)
+            except PublicContractValidationError as exc:
+                raise ToolError(f"input validation error: {exc}") from exc
         if self._bound_principal_id:
             arguments = self._bind_principal(name, arguments, None)
         legacy_request = (
@@ -1357,6 +1439,7 @@ def create_server(config: McpConfig | None = None) -> MCPServer:
         }
 
     for registered_tool in mcp._tool_manager.list_tools():
+        apply_public_contract(registered_tool)
         name = registered_tool.name
         read_only = name in {
             "server_capabilities",

@@ -19,6 +19,13 @@ conversation；Host/Agent 负责 LLM、上下文聚合、工具选择与受众�
   principal/campaign/session 权威状态。
 - legacy initialize、连接 exposure 与 `tools/list_changed` 仅保留在迁移适配器。
 
+29 个公开工具都提供简洁工具说明、有界且带说明的输入、与结果对应的
+`outputSchema`，以及四项 MCP 行为 annotation。成功结果同时保留标准 MCP text 和
+经过 schema 验证的 `structuredContent`；可修复的执行错误返回包含 `code`、
+`message`、`retryable`、`recovery` 的安全结构，未知 method/tool 与 schema 层请求错误
+仍由协议层处理。契约测试覆盖 legacy/2026-07-28 × stdio/真实 Streamable HTTP，三个
+完整 campaign fixture 还会按公开 schema 验证实际返回。
+
 ## 本地与 Hosted
 
 本地默认使用 stdio；Streamable HTTP 与 stdio 调用相同 handler/schema/authority。

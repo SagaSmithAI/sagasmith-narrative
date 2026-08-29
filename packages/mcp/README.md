@@ -18,6 +18,16 @@ campaign and revision. `exposure` returns an expiring navigation handle and
 never grants authority. Legacy connection exposure and `tools/list_changed`
 remain only in the migration adapter.
 
+Every one of the 29 public tools publishes a concise description, bounded and
+described inputs, a result-specific `outputSchema`, and all four MCP behavior
+annotations. Successful calls keep the standard MCP text representation beside
+validated `structuredContent`. Repairable execution failures return a safe
+structured error with `code`, `message`, `retryable`, and `recovery`; unknown
+methods/tools and schema-level request failures remain protocol concerns. The
+contract suite exercises legacy and 2026-07-28 clients over both stdio and real
+Streamable HTTP, while the three full campaign fixtures validate returned data
+against the advertised schemas.
+
 The server never guesses rules from prose. A campaign binds an immutable profile
 version and checksum. Profiles may use Level 0 (explicit Agent/human rulings) or
 the limited pure Level 1 mechanics in the sibling Narrative Domain package. More complex rules require a
