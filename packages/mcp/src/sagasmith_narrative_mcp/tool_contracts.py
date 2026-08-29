@@ -200,13 +200,20 @@ def _closed_record(
     *,
     required: set[str] | None = None,
     free_documents: set[str] | None = None,
+    nullable_documents: set[str] | None = None,
 ) -> dict[str, Any]:
     free_documents = free_documents or set()
+    nullable_documents = nullable_documents or set()
     properties: dict[str, Any] = {}
     for field in sorted(fields):
         if field in free_documents:
-            properties[field] = _open_document(
+            document = _open_document(
                 "Profile-defined extension document validated by the active Narrative contract."
+            )
+            properties[field] = (
+                {"anyOf": [document, {"type": "null"}]}
+                if field in nullable_documents
+                else document
             )
         elif field in {
             "revision",
@@ -274,10 +281,12 @@ _CAMPAIGN_SCHEMA = _closed_record(
     },
     required={"id", "system_id", "slug", "name", "status", "description", "revision"},
     free_documents={"settings", "state"},
+    nullable_documents={"state"},
 )
 _ACTOR_SCHEMA = _closed_record(
     {
         "id",
+        "actor_ref",
         "system_id",
         "campaign_id",
         "template_id",
@@ -636,6 +645,7 @@ _CAMPAIGN_FIELDS = {
 }
 _ACTOR_FIELDS = {
     "id",
+    "actor_ref",
     "system_id",
     "campaign_id",
     "template_id",
@@ -804,7 +814,7 @@ OUTPUT_FIELDS = {
     "snapshot_change": _WRITE_FIELDS | {"snapshot"},
     "branch_query": {"branches", "next_cursor"},
     "branch_change": _WRITE_FIELDS | {"branch"},
-    "state_revision": {"revisions"},
+    "state_revision": {"revisions", "next_cursor"},
 }
 
 
