@@ -1,6 +1,6 @@
 # SagaSmith Narrative Skills
 
-[Website](https://sagasmithai.github.io) · [Platform overview](https://github.com/SagaSmithAI/.github/blob/main/profile/README.md) · [SagaSmith Web](https://github.com/SagaSmithAI/SagaSmith-service) · [Content catalog](https://github.com/SagaSmithAI/SagaSmith-dnd-content-library)
+[Website](https://sagasmithai.github.io) · [Platform overview](https://github.com/SagaSmithAI/.github/blob/main/profile/README.md) · [SagaSmith Web](https://github.com/SagaSmithAI/SagaSmith-Web) · [Content catalog](https://github.com/SagaSmithAI/SagaSmith-dnd-content-library)
 
 > Current source: `sagasmith-narrative/skills`. The former standalone Skills and generic Module Generator repositories are archived.
 
@@ -28,7 +28,13 @@ Each Skill lives under `skills/<skill-name>/`, includes UI metadata in `agents/o
 
 ## Required MCP behavior
 
-Skills discover the native tool list at runtime. `mechanic_resolve` and Conflict tools are optional profile capabilities and must never be assumed. Every context-changing operation requires exposure and `host_context_binding` refresh.
+Skills discover the complete, deterministic native catalog at runtime. The Host
+derives a task/role/phase/profile facade and exposes at most 16 tools to the model
+by default. `mechanic_resolve` and Conflict tools are optional profile
+capabilities and must never be assumed. Every context-changing operation requires
+a fresh `host_context_binding`; an `exposure_handle` is optional catalog guidance,
+not authority. Only the explicit legacy adapter depends on connection exposure
+or `tools/list_changed`.
 
 Campaign-scoped authoring queries are available in Lobby. Actor updates require
 facilitator or explicit actor control; a facilitator-less owner has no implicit
@@ -36,6 +42,16 @@ narrative read/write authority. Snapshot/branch/revision recovery is reserved
 for campaign administrators, and private NPC close receipts expose proposal IDs
 without proposal text.
 
+Each authoritative write carries campaign/branch revision guards and one stable
+idempotency key across retries. Skills keep trusted campaign, authorization,
+identity, audience, and revision context structurally separate from player prose;
+the model never chooses an authoritative principal. Repairable MCP tool errors
+must be handled from their structured recovery guidance rather than flattened
+into generic transport failures.
+
 ## Validation
 
-Run the system `skill-creator` validator once for each `skills/*` directory.
+Run the repository or system `skill-creator` validator once for each
+`skills/*` directory. Then run the MCP contract and campaign regression suites
+for any workflow that changes a public tool sequence. Validation uses original
+fixtures and requires no paid model or production campaign data.
