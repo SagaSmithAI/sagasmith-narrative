@@ -10,7 +10,7 @@ import pytest
 SECRET = "real-agent-host-auth-context-secret-at-least-32-bytes"
 
 
-def test_real_sagasmith_agent_registry_refreshes_native_tools(tmp_path: Path) -> None:
+def test_real_sagasmith_agent_keeps_modern_catalog_stable(tmp_path: Path) -> None:
     asyncio.run(_exercise_agent_host(tmp_path))
 
 
@@ -54,13 +54,20 @@ async def _exercise_agent_host(tmp_path: Path) -> None:
                     enabled_tools=["*"],
                     inject_principal=True,
                     auth_context_secret=SECRET,
+                    delegation_secret=SECRET,
+                    target_service="sagasmith-narrative-mcp",
+                    authorization_audience="sagasmith-narrative-mcp",
+                    protocol_mode="2026-07-28",
                 )
             },
             registry,
             session_store=SessionManager(tmp_path / "sessions"),
         )
         try:
-            assert "mcp_narrative_campaign_setup" not in registry.tool_names
+            initial_names = tuple(registry.tool_names)
+            assert len(initial_names) == 29
+            assert tuple(sorted(initial_names)) == initial_names
+            assert "mcp_narrative_campaign_setup" in initial_names
             exposure = registry.get("mcp_narrative_exposure")
             assert exposure is not None
             with request_context(
@@ -73,9 +80,17 @@ async def _exercise_agent_host(tmp_path: Path) -> None:
                     session_key="discord:table-1",
                 )
             ):
-                await exposure.execute(action="open")
-                await exposure.execute(action="set", add_tool_ids=["campaign_setup"])
-            assert "mcp_narrative_campaign_setup" in registry.tool_names
+                opened = await exposure.execute(action="open")
+                assert not opened.is_error, str(opened)
+                first_handle = opened.structured_content["exposure_handle"]
+                selected = await exposure.execute(
+                    action="set",
+                    exposure_handle=first_handle,
+                    add_tool_ids=["campaign_setup"],
+                )
+                assert not selected.is_error, str(selected)
+                assert "campaign_setup" in selected.structured_content["loaded_tools"]
+            assert tuple(registry.tool_names) == initial_names
             with request_context(
                 RequestContext(
                     channel="discord",
@@ -88,11 +103,23 @@ async def _exercise_agent_host(tmp_path: Path) -> None:
             ):
                 reopened = await exposure.execute(action="open")
                 assert not reopened.is_error, str(reopened)
-                assert reopened.audit_receipt["actor_principal"] == "discord:user:member-2"
+                assert reopened.audit_receipt["requester_principal"] == (
+                    "discord:user:member-2"
+                )
                 assert reopened.audit_receipt["conversation_principal"] == ("discord:group:table-1")
-                assert "mcp_narrative_campaign_setup" not in registry.tool_names
-                await exposure.execute(action="set", add_tool_ids=["campaign_setup"])
-            assert "mcp_narrative_campaign_setup" in registry.tool_names
+                assert reopened.audit_receipt["target_service"] == "sagasmith-narrative-mcp"
+                assert reopened.audit_receipt["authorized_audience"] == (
+                    "sagasmith-narrative-mcp"
+                )
+                second_handle = reopened.structured_content["exposure_handle"]
+                assert second_handle != first_handle
+                selected = await exposure.execute(
+                    action="set",
+                    exposure_handle=second_handle,
+                    add_tool_ids=["campaign_setup"],
+                )
+                assert not selected.is_error, str(selected)
+            assert tuple(registry.tool_names) == initial_names
         finally:
             for connection in connections.values():
                 await connection.aclose()
