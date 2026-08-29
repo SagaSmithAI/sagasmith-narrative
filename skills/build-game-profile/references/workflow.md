@@ -14,7 +14,7 @@
 
 ## Workflow
 
-1. Discover Lobby profile authoring tools with `server_capabilities` and `exposure`.
+1. Confirm the host-selected stable catalog with `server_capabilities`; use `exposure` as Lobby authoring guidance, not authorization or tool discovery.
 2. Create or resume an MCP-owned draft with `profile_change` action `create_draft` or `update_draft`. Never edit a finalized profile.
 3. Declare identity, compatibility, actor schemas, authority capabilities, activities, record extensions, and presentation labels.
 4. Encode only the four bounded Level 1 mechanic kinds: `dice_pool`, `table`, `track_delta`, and `resource_delta`. Level 1 requires at least one mechanic plus the `mechanics` capability; dice bands must cover the full die without overlap. Keep tag/status changes in explicit authorized settlements, not hidden mechanic behavior.

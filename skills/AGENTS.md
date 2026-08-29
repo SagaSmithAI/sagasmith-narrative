@@ -5,7 +5,8 @@ This directory contains the MCP-first Skills shipped from the
 
 ## Boundaries
 
-- Use only the native, dynamically exposed Narrative MCP facade.
+- Use only the modern host-selected stable Narrative MCP catalog. Treat `exposure`
+  as phase/authority guidance, never as catalog mutation or authorization.
 - Never add CLI, direct database/core access, fixed tool supersets, text simulation, or compatibility fallbacks.
 - Keep authoritative state, authorization, revisions, random streams, idempotency, and settlement in MCP.
 - Keep semantic interpretation, evidence review, audience decisions, and narration in the Agent/Skills.

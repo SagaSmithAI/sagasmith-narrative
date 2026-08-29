@@ -11,12 +11,14 @@ CORE_TOOLS = frozenset({"exposure", "server_capabilities", "campaign_query", "sk
 
 LOBBY_TOOLS = frozenset(
     "campaign_setup access_change profile_change pack_change actor_change actor_query "
-    "game_phase narrative_query snapshot_change snapshot_query branch_change branch_query "
+    "game_phase narrative_query campaign_design_change campaign_expansion "
+    "snapshot_change snapshot_query "
+    "branch_change branch_query "
     "state_revision".split()
 )
 PLAY_TOOLS = frozenset(
     "access_change actor_change actor_query game_phase scene_change continuity_query "
-    "narrative_query "
+    "narrative_query campaign_design_change campaign_expansion "
     "narrative_change narrative_settle mechanic_resolve npc_conversation downtime_settle "
     "world_turn_settle snapshot_change snapshot_query branch_change branch_query "
     "state_revision conflict_query".split()
@@ -29,7 +31,8 @@ OPTIONAL_CONFLICT_TOOLS = frozenset(
     {"conflict_start", "conflict_query", "conflict_act", "conflict_end"}
 )
 ADMIN_TOOLS = frozenset(
-    "access_change profile_change pack_change game_phase snapshot_change snapshot_query "
+    "access_change profile_change pack_change campaign_design_change campaign_expansion game_phase "
+    "snapshot_change snapshot_query "
     "branch_change branch_query state_revision".split()
 )
 NO_CAMPAIGN_TOOLS = frozenset({"campaign_setup"})

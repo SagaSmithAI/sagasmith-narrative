@@ -15,10 +15,15 @@
 2. Review unresolved proposals and active conversations/activities. Close or defer them explicitly.
 3. Select `downtime_settle` for participant downtime or `world_turn_settle` for faction/world/time-skip evolution; keep travel and other narrative consequences inside the appropriate explicit settlement.
 4. Ask authorized humans/Agent for semantic developments. Do not auto-simulate hidden intent.
-5. Invoke `mechanic_resolve` only where explicitly declared and currently exposed.
+5. Invoke `mechanic_resolve` only where explicitly declared, present in the host-selected stable catalog, and currently permitted; exposure is guidance rather than authority.
 6. Build one explicit settlement with elapsed time, events/audiences, relationship/faction/clock/resource/thread/location/status changes, knowledge effects, and source anchors.
 7. Commit with expected revisions and idempotency; verify receipts and refresh state.
 8. Derive compact summaries and diagnostics from committed state. An authorized campaign administrator may snapshot at agreed milestones; ordinary stewards must request that administrative action rather than assuming it.
+9. Record front, thread, clue, and character-arc progress through legal status
+   transitions with typed current-branch evidence. A player arc completes only
+   through one of its declared opportunity references plus audience-safe, branch-local event/fact/record evidence produced by play and linked to that actor or scene; an Atlas scene reference alone is never completion proof. If the next chapter requires a new scene, location, plot line, or
+   character outside the active Atlas, use the signed zero-tool expansion
+   proposal flow and settle it through a new immutable child Pack before use.
 
 ## Outputs
 

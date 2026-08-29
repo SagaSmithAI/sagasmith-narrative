@@ -14,8 +14,9 @@ more portable Narrative Packs. Use the narrower `build-game-profile` or
 
 ## Boundaries
 
-- Author only MCP-owned drafts in Lobby. Use the native dynamic tool list and
-  refresh after profile/Pack activation or any context-changing operation.
+- Author only MCP-owned drafts in Lobby. Use the host-selected stable catalog,
+  treat exposure as guidance, and refresh authoritative context after profile/
+  Pack activation or any context-changing operation.
 - Let the Agent interpret source meaning and record evidence-backed semantic
   decisions. Let the Narrative Domain validators enforce the bounded
   declarative contract. Let MCP own authorization, revisions, idempotency,
@@ -27,6 +28,10 @@ more portable Narrative Packs. Use the narrower `build-game-profile` or
   project's meaning into Core, the Narrative Domain, or MCP.
 - Default to finalized artifacts only. Import and activation are separate
   authorized outcomes.
+- For campaigns intended to grow during play, include one generation-zero
+  `content.runtime_manifest` with setting, initial Atlas scenes, fronts,
+  threads, clues, and opportunity-only character arcs. Later material is a new
+  evidence-linked child Pack, not an edit to the finalized root.
 
 ## Completion
 

@@ -191,6 +191,17 @@ def initial_document() -> dict[str, Any]:
         "element_grants": [],
         "actor_bindings": {},
         "npc_conversations": {},
+        "campaign_design": {
+            "schema_version": 1,
+            "campaign_mode": None,
+            "manifests": {},
+            "progress": {
+                "character_arc": {},
+                "clue": {},
+                "front": {},
+                "thread": {},
+            },
+        },
         "conflict": None,
         "random_stream": {"seed": None, "cursor": 0},
         "settlements": [],
@@ -207,6 +218,7 @@ def narrative_document(state: Mapping[str, Any] | None) -> dict[str, Any]:
     result = deepcopy(dict(current))
     if result.get("phase") not in PHASES:
         raise ValueError("invalid narrative phase")
+    result.setdefault("campaign_design", deepcopy(initial_document()["campaign_design"]))
     return result
 
 

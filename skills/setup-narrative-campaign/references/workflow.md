@@ -14,7 +14,7 @@
 
 ## Workflow
 
-1. Call `server_capabilities`; use `skill_query` list/search/get_section rather than reading whole Skill files; search and set `exposure` for Lobby setup. Use only returned native tools.
+1. Call `server_capabilities`; use `skill_query` list/search/get_section rather than reading whole Skill files; let the Host select from the stable native catalog, and use `exposure` only as Lobby guidance. Never infer permission or catalog membership from exposure.
 2. Query existing campaigns before creating one. Resume rather than duplicate when an idempotent setup already exists; otherwise create with `campaign_setup`, preserve the returned binding, then open a campaign-bound Lobby exposure.
 3. Query campaign-scoped profile and Pack drafts/releases with `narrative_query`. If the requested finalized profile does not exist, switch to `build-game-profile`; if a required finalized Pack does not exist, switch to `author-audit-content-pack`. Complete evidence review and explicit finalization there, then query the released versions again. Absence is neither permission to invent a release nor a permanent blocker. Do not bind drafts or infer compatibility.
 5. Grant, update, or revoke membership, roles, actor ownership, and optional element stewardship with `access_change`. Preserve at least one owner and never trust an unbound caller-supplied principal.
@@ -39,7 +39,7 @@
 
 ## Context reset
 
-Discard tool schemas and cached context after campaign creation or selection, phase/profile/Pack changes, role or actor-grant changes, branch operations, restore, any advertised revision recovery, or `tools/list_changed`.
+Discard cached context after campaign creation or selection, phase/profile/Pack changes, role or actor-grant changes, branch operations, restore, or advertised revision recovery. Refresh schemas only for a real `tools/list_changed`; ordinary exposure changes do not mutate the stable catalog.
 
 Every campaign write carries `campaign_id`, trusted `principal_id`, `expected_revision`, and `idempotency_key`; branch-sensitive writes also carry `expected_branch_id`. Verify the returned `host_context_binding` fields: campaign, branch, campaign revision, phase, profile ID/version/checksum, principal, role, and exposure revision.
 

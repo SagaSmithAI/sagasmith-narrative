@@ -644,7 +644,10 @@ def create_server(config: McpConfig | None = None) -> MCPServer:
     database = Database(config.database_url)
     database.upgrade_schema()
     default_local_principal(database)
-    runtime = NarrativeRuntime(database)
+    runtime = NarrativeRuntime(
+        database,
+        proposal_attestation_secret=config.resolved_proposal_attestation_secret(),
+    )
     registry = ExposureRegistry()
     skills = SkillCatalog()
     mcp = SessionExposureFastMCP(
@@ -1035,7 +1038,7 @@ def create_server(config: McpConfig | None = None) -> MCPServer:
     @mcp.tool()
     def narrative_query(
         campaign_id: str,
-        kind: Literal["profile", "pack", "scene", "record"],
+        kind: Literal["profile", "pack", "campaign_design", "scene", "record"],
         record_id: str | None = None,
         principal_id: str = LOCAL_SYSTEM_PRINCIPAL_ID,
         query: SearchText = "",
@@ -1057,6 +1060,43 @@ def create_server(config: McpConfig | None = None) -> MCPServer:
             ]
         page, next_cursor = _bounded_page(values, limit=limit, cursor=cursor)
         return {"items": page, "next_cursor": next_cursor}
+
+    @mcp.tool()
+    def campaign_design_change(
+        campaign_id: str,
+        entity_type: Literal["front", "thread", "clue", "character_arc"],
+        entity_id: str,
+        status: str,
+        evidence_refs: list[str],
+        expected_revision: int,
+        expected_branch_id: str,
+        idempotency_key: str,
+        note: str = "",
+        principal_id: str = LOCAL_SYSTEM_PRINCIPAL_ID,
+    ) -> dict[str, Any]:
+        return runtime.campaign_design_change(
+            campaign_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            status=status,
+            evidence_refs=evidence_refs,
+            note=note,
+            **common(principal_id, expected_revision, expected_branch_id, idempotency_key),
+        )
+
+    @mcp.tool()
+    def campaign_expansion(
+        campaign_id: str,
+        action: Literal["context", "validate"],
+        data: dict[str, Any] | None = None,
+        principal_id: str = LOCAL_SYSTEM_PRINCIPAL_ID,
+    ) -> dict[str, Any]:
+        return runtime.campaign_expansion(
+            campaign_id,
+            action=action,
+            data=data,
+            principal_id=principal_id,
+        )
 
     @mcp.tool()
     def narrative_change(
@@ -1107,6 +1147,11 @@ def create_server(config: McpConfig | None = None) -> MCPServer:
     def continuity_query(
         campaign_id: str,
         actor_id: str | None = None,
+        purpose: Literal["continuity", "actor_memory"] = "continuity",
+        query: SearchText = "",
+        branch_id: str | None = None,
+        current_refs: list[str] | None = None,
+        budget_chars: int = 8_000,
         limit: PageLimit = 50,
         principal_id: str = LOCAL_SYSTEM_PRINCIPAL_ID,
     ) -> dict[str, Any]:
@@ -1123,8 +1168,29 @@ def create_server(config: McpConfig | None = None) -> MCPServer:
         audience = (
             "dm" if runtime._has_facilitator_authority(document, membership.role) else "player"
         )
-        return runtime.continuity.context(
-            campaign_id, actor_id=actor_id, audience=audience, limit=limit
+        selected_branch_id = runtime.readable_branch_id(
+            campaign_id, principal_id, branch_id
+        )
+        if purpose == "actor_memory":
+            if not actor_id:
+                raise ValueError("actor_memory continuity requires actor_id")
+            return runtime.actor_memory_context(
+                campaign_id,
+                actor_id=actor_id,
+                principal_id=principal_id,
+                query=query,
+                branch_id=selected_branch_id,
+                current_refs=current_refs or [],
+                budget_chars=budget_chars,
+            )
+        return runtime.continuity_context(
+            campaign_id,
+            principal_id=principal_id,
+            actor_id=actor_id,
+            audience=audience,
+            limit=limit,
+            query=query,
+            branch_id=selected_branch_id,
         )
 
     @mcp.tool()
@@ -1147,7 +1213,9 @@ def create_server(config: McpConfig | None = None) -> MCPServer:
     @mcp.tool()
     def npc_conversation(
         campaign_id: str,
-        action: Literal["open", "propose", "publish", "close", "abort"],
+        action: Literal[
+            "open", "claim", "refresh", "propose", "publish", "close", "abort"
+        ],
         conversation_id: str | None = None,
         npc_actor_id: str | None = None,
         data: dict[str, Any] | None = None,

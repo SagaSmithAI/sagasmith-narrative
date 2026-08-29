@@ -1,6 +1,6 @@
 ---
 name: backtest-recover-campaign
-description: Run real-host public-facade regressions or diagnose and recover SagaSmith narrative campaigns. Use for original campaign Pack playthroughs, dynamic tool refresh tests, authorization and audience checks, idempotency and revision faults, restart/resume, snapshot and branch recovery, or machine-readable failure reports.
+description: Run real-host public-facade regressions or diagnose and recover SagaSmith narrative campaigns. Use for original campaign Pack playthroughs, stable-catalog host selection and exposure-guidance tests, authorization and audience checks, idempotency and revision faults, restart/resume, snapshot and branch recovery, or machine-readable failure reports.
 ---
 
 # Backtest and Recover Campaign
