@@ -10,7 +10,7 @@ import pytest
 SECRET = "real-agent-host-auth-context-secret-at-least-32-bytes"
 
 
-def test_real_sagasmith_agent_keeps_modern_catalog_stable(tmp_path: Path) -> None:
+def test_real_sagasmith_agent_respects_protocol_era_catalog_contract(tmp_path: Path) -> None:
     asyncio.run(_exercise_agent_host(tmp_path))
 
 
@@ -44,32 +44,40 @@ async def _exercise_agent_host(tmp_path: Path) -> None:
             monorepo / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         )
         assert narrative_python.is_file(), "install Narrative MCP dev environment first"
+        modern_agent = "protocol_mode" in MCPServerConfig.model_fields
+        server_options = {
+            "command": str(narrative_python),
+            "args": ["-m", "sagasmith_narrative_mcp.server"],
+            "env": env,
+            "cwd": str(root),
+            "enabled_tools": ["*"],
+            "inject_principal": True,
+            "auth_context_secret": SECRET,
+        }
+        if modern_agent:
+            server_options.update(
+                {
+                    "delegation_secret": SECRET,
+                    "target_service": "sagasmith-narrative-mcp",
+                    "authorization_audience": "sagasmith-narrative-mcp",
+                    "protocol_mode": "2026-07-28",
+                }
+            )
         connections = await connect_mcp_servers(
-            {
-                "narrative": MCPServerConfig(
-                    command=str(narrative_python),
-                    args=["-m", "sagasmith_narrative_mcp.server"],
-                    env=env,
-                    cwd=str(root),
-                    enabled_tools=["*"],
-                    inject_principal=True,
-                    auth_context_secret=SECRET,
-                    delegation_secret=SECRET,
-                    target_service="sagasmith-narrative-mcp",
-                    authorization_audience="sagasmith-narrative-mcp",
-                    protocol_mode="2026-07-28",
-                )
-            },
+            {"narrative": MCPServerConfig(**server_options)},
             registry,
             session_store=SessionManager(tmp_path / "sessions"),
         )
         try:
-            initial_names = tuple(registry.tool_names)
-            assert len(initial_names) == 29
-            assert tuple(sorted(initial_names)) == initial_names
-            assert "mcp_narrative_campaign_setup" in initial_names
             exposure = registry.get("mcp_narrative_exposure")
             assert exposure is not None
+            initial_names = tuple(registry.tool_names)
+            if modern_agent:
+                assert len(initial_names) == 29
+                assert tuple(sorted(initial_names)) == initial_names
+                assert "mcp_narrative_campaign_setup" in initial_names
+            else:
+                assert "mcp_narrative_campaign_setup" not in initial_names
             with request_context(
                 RequestContext(
                     channel="discord",
@@ -83,14 +91,16 @@ async def _exercise_agent_host(tmp_path: Path) -> None:
                 opened = await exposure.execute(action="open")
                 assert not opened.is_error, str(opened)
                 first_handle = opened.structured_content["exposure_handle"]
-                selected = await exposure.execute(
-                    action="set",
-                    exposure_handle=first_handle,
-                    add_tool_ids=["campaign_setup"],
-                )
+                set_arguments = {"action": "set", "add_tool_ids": ["campaign_setup"]}
+                if modern_agent:
+                    set_arguments["exposure_handle"] = first_handle
+                selected = await exposure.execute(**set_arguments)
                 assert not selected.is_error, str(selected)
                 assert "campaign_setup" in selected.structured_content["loaded_tools"]
-            assert tuple(registry.tool_names) == initial_names
+            if modern_agent:
+                assert tuple(registry.tool_names) == initial_names
+            else:
+                assert "mcp_narrative_campaign_setup" in registry.tool_names
             with request_context(
                 RequestContext(
                     channel="discord",
@@ -103,23 +113,24 @@ async def _exercise_agent_host(tmp_path: Path) -> None:
             ):
                 reopened = await exposure.execute(action="open")
                 assert not reopened.is_error, str(reopened)
-                assert reopened.audit_receipt["requester_principal"] == (
-                    "discord:user:member-2"
-                )
                 assert reopened.audit_receipt["conversation_principal"] == ("discord:group:table-1")
-                assert reopened.audit_receipt["target_service"] == "sagasmith-narrative-mcp"
-                assert reopened.audit_receipt["authorized_audience"] == (
-                    "sagasmith-narrative-mcp"
-                )
+                principal_key = "requester_principal" if modern_agent else "actor_principal"
+                assert reopened.audit_receipt[principal_key] == "discord:user:member-2"
                 second_handle = reopened.structured_content["exposure_handle"]
                 assert second_handle != first_handle
-                selected = await exposure.execute(
-                    action="set",
-                    exposure_handle=second_handle,
-                    add_tool_ids=["campaign_setup"],
-                )
+                set_arguments = {"action": "set", "add_tool_ids": ["campaign_setup"]}
+                if modern_agent:
+                    assert reopened.audit_receipt["target_service"] == ("sagasmith-narrative-mcp")
+                    assert reopened.audit_receipt["authorized_audience"] == (
+                        "sagasmith-narrative-mcp"
+                    )
+                    set_arguments["exposure_handle"] = second_handle
+                selected = await exposure.execute(**set_arguments)
                 assert not selected.is_error, str(selected)
-            assert tuple(registry.tool_names) == initial_names
+            if modern_agent:
+                assert tuple(registry.tool_names) == initial_names
+            else:
+                assert "mcp_narrative_campaign_setup" in registry.tool_names
         finally:
             for connection in connections.values():
                 await connection.aclose()

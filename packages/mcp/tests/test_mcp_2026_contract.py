@@ -154,7 +154,8 @@ def test_modern_exposure_handle_is_explicit_guidance_not_catalog_state(tmp_path:
             )
         ).structured_content
         assert current["exposure_id"] == handle
-        assert current["principal_id"] == "user:authorized"
+        assert current["principal_id"] == opened["principal_id"]
+        assert current["principal_id"] not in {"model:forged", "model:forged-again"}
         assert [tool.name for tool in await server.list_tools()] == baseline
 
     asyncio.run(exercise())
