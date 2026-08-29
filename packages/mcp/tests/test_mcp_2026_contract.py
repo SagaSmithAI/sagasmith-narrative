@@ -19,7 +19,16 @@ SECRET = "narrative-modern-auth-context-secret-32-bytes"
 SERVICE = "sagasmith-narrative-mcp"
 
 
-def delegated_meta(*, nonce: str, operation: str, target_service: str = SERVICE):
+def delegated_meta(
+    *,
+    nonce: str,
+    operation: str,
+    target_service: str = SERVICE,
+    requester_principal: str = "user:authorized",
+    resource_owner_principal: str = "user:authorized",
+    acting_host_principal: str = "workload:sagasmith-agent",
+    campaign_id: str = "campaign:scope",
+):
     return {
         AUTH_CONTEXT_META_KEY: sign_delegated_auth_context(
             secret=SECRET,
@@ -27,14 +36,14 @@ def delegated_meta(*, nonce: str, operation: str, target_service: str = SERVICE)
             target_service=target_service,
             caller_principal="workload:hosted-agent",
             workload_identity="deployment:sagasmith-agent/test",
-            requester_principal="user:authorized",
-            resource_owner_principal="user:authorized",
-            acting_host_principal="host:facilitator",
+            requester_principal=requester_principal,
+            resource_owner_principal=resource_owner_principal,
+            acting_host_principal=acting_host_principal,
             acting_character_id="actor:hero",
             authorized_audience=SERVICE,
             allowed_operations=[operation],
             conversation_principal="room:narrative:test",
-            campaign_id="campaign:scope",
+            campaign_id=campaign_id,
             room_turn_id="turn:narrative-modern",
             base_revision=0,
             nonce=nonce,
@@ -75,6 +84,7 @@ def test_modern_identity_audience_revision_and_trace_are_request_scoped(tmp_path
         receipt = result.content[0].meta["sagasmith_auth_context_receipt"]
         assert receipt["schema"] == AUTH_CONTEXT_DELEGATION_SCHEMA
         assert receipt["requester_principal"] == "user:authorized"
+        assert receipt["acting_host_principal"] == "workload:sagasmith-agent"
         assert receipt["target_service"] == SERVICE
         assert result.meta["sagasmith_trace_context"]["traceparent"].startswith("00-")
 
@@ -98,6 +108,82 @@ def test_modern_identity_audience_revision_and_trace_are_request_scoped(tmp_path
         assert rejected.is_error is True
         assert rejected.structured_content["error"]["code"] == "stale_revision"
         assert rejected.structured_content["error"]["retryable"] is True
+
+    asyncio.run(exercise())
+
+
+def test_modern_requester_authorizes_while_acting_host_is_audited(tmp_path: Path) -> None:
+    async def exercise() -> None:
+        server = create_server(
+            McpConfig(
+                database_url=sqlite_database_url(tmp_path / "requester-auth.db"),
+                auth_context_secret=SECRET,
+            )
+        )
+        allowed_campaign = server.runtime.campaign_create(
+            name="Requester-visible chronicle",
+            principal_id="user:resource-owner",
+            idempotency_key="create-requester-visible",
+        )
+        server.runtime.access.ensure_principal(
+            "user:player", platform="test", external_id="player"
+        )
+        server.runtime.access.grant_campaign(
+            allowed_campaign["id"], "user:player", role="player"
+        )
+        denied_campaign = server.runtime.campaign_create(
+            name="Owner-only chronicle",
+            principal_id="user:resource-owner",
+            idempotency_key="create-owner-only",
+        )
+
+        accepted = await server.call_tool(
+            "campaign_query",
+            {
+                "action": "get",
+                "campaign_id": allowed_campaign["id"],
+                "principal_id": "user:resource-owner",
+            },
+            modern_context(
+                server,
+                delegated_meta(
+                    nonce="requester-allowed",
+                    operation="campaign_query",
+                    requester_principal="user:player",
+                    resource_owner_principal="user:resource-owner",
+                    campaign_id=allowed_campaign["id"],
+                ),
+            ),
+        )
+        assert not accepted.is_error
+        assert accepted.structured_content["id"] == allowed_campaign["id"]
+        assert accepted.structured_content["role"] == "player"
+        receipt = accepted.content[0].meta["sagasmith_auth_context_receipt"]
+        assert receipt["requester_principal"] == "user:player"
+        assert receipt["resource_owner_principal"] == "user:resource-owner"
+        assert receipt["acting_host_principal"] == "workload:sagasmith-agent"
+
+        denied = await server.call_tool(
+            "campaign_query",
+            {
+                "action": "get",
+                "campaign_id": denied_campaign["id"],
+                "principal_id": "user:resource-owner",
+            },
+            modern_context(
+                server,
+                delegated_meta(
+                    nonce="requester-denied",
+                    operation="campaign_query",
+                    requester_principal="user:player",
+                    resource_owner_principal="user:resource-owner",
+                    campaign_id=denied_campaign["id"],
+                ),
+            ),
+        )
+        assert denied.is_error is True
+        assert denied.structured_content["error"]["code"] == "authorization_denied"
+        assert "access" in denied.structured_content["error"]["message"]
 
     asyncio.run(exercise())
 
