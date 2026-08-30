@@ -630,6 +630,12 @@ class RequestScopedMCPServer(MCPServer):
             await legacy_request[1].send_tool_list_changed()
         campaign_id = str(arguments.get("campaign_id") or "") or None
         campaign_id = campaign_id or (exposure.campaign_id if exposure else None)
+        if campaign_id is None and name == "campaign_setup":
+            candidate = result.structured_content if isinstance(result, CallToolResult) else None
+            if isinstance(candidate, dict):
+                candidate_id = candidate.get("id")
+                if isinstance(candidate_id, str) and candidate_id:
+                    campaign_id = candidate_id
         if campaign_id:
             if session_key is not None:
                 await self._refresh(campaign_id)
