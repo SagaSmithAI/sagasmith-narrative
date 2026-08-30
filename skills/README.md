@@ -49,6 +49,12 @@ the model never chooses an authoritative principal. Repairable MCP tool errors
 must be handled from their structured recovery guidance rather than flattened
 into generic transport failures.
 
+Long-form procedures use four-track actor memory for PC/NPC continuity and keep
+fronts, plot threads, clues, and character arcs explicit. They may start from a
+small setting-and-scene seed or extend a complete Module into reasonable
+off-Atlas play, but generated material enters authority only through an
+attested, lineage-linked child episode Pack and the normal Pack lifecycle.
+
 ## Validation
 
 Run the repository or system `skill-creator` validator once for each

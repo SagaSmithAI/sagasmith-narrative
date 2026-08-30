@@ -433,7 +433,7 @@ def _field_schema(name: str) -> dict[str, Any]:
     }:
         return {"type": "boolean"}
     if name == "next_cursor":
-        return {"type": ["string", "null"], "maxLength": 32}
+        return {"type": ["string", "null"], "maxLength": 128}
     if name in {
         "active_scene_id",
         "campaign_id",
@@ -533,6 +533,7 @@ def _field_schema(name: str) -> dict[str, Any]:
         "conversation",
         "finalized",
         "imports",
+        "memory",
         "pack",
         "proposal",
         "proposal_attestation",
@@ -601,6 +602,7 @@ def _field_schema(name: str) -> dict[str, Any]:
                 "truncated",
                 "active_context_refs",
                 "pinned_module_evidence_count",
+                "pagination",
             },
             required={"strategy", "query", "budget_chars", "used_chars", "truncated"},
         )
@@ -616,6 +618,28 @@ def _field_schema(name: str) -> dict[str, Any]:
             retrieval["properties"][integer_field] = {"type": "integer", "minimum": 0}
         for boolean_field in {"pinned_budget_overflow", "truncated"}:
             retrieval["properties"][boolean_field] = {"type": "boolean"}
+        page = _closed_record(
+            {"offset", "page_limit", "has_more", "next_offset", "streams"},
+            required={"offset", "page_limit", "has_more", "next_offset", "streams"},
+        )
+        for field in {"offset", "page_limit"}:
+            page["properties"][field] = {"type": "integer", "minimum": 0}
+        page["properties"]["has_more"] = {"type": "boolean"}
+        page["properties"]["next_offset"] = {
+            "anyOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]
+        }
+        stream = _closed_record(
+            {"candidate_count", "has_more"}, required={"candidate_count", "has_more"}
+        )
+        stream["properties"]["candidate_count"] = {"type": "integer", "minimum": 0}
+        stream["properties"]["has_more"] = {"type": "boolean"}
+        page["properties"]["streams"] = _closed_record(
+            {"facts", "events", "actor_knowledge"},
+            required={"facts", "events", "actor_knowledge"},
+        )
+        for field in {"facts", "events", "actor_knowledge"}:
+            page["properties"]["streams"]["properties"][field] = deepcopy(stream)
+        retrieval["properties"]["pagination"] = page
         return retrieval
     if name == "campaigns":
         return {"type": "array", "items": deepcopy(_CAMPAIGN_SCHEMA), "maxItems": 10_000}
@@ -773,7 +797,13 @@ OUTPUT_FIELDS = {
     "narrative_change": _WRITE_FIELDS | {"record"},
     "narrative_settle": _SETTLEMENT_FIELDS,
     "continuity_query": {
+        "schema_version",
+        "purpose",
         "campaign_id",
+        "branch_id",
+        "actor_id",
+        "actor_ref",
+        "audience",
         "branch",
         "facts",
         "events",
@@ -781,6 +811,9 @@ OUTPUT_FIELDS = {
         "module_evidence",
         "scoped_scene",
         "retrieval",
+        "memory",
+        "constraints",
+        "next_cursor",
     },
     "mechanic_resolve": _WRITE_FIELDS | {"mechanic_id", "result", "random_stream_receipt"},
     "npc_conversation": _WRITE_FIELDS

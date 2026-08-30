@@ -125,13 +125,18 @@ def activate_profile(
     campaign_id: str,
     *,
     capabilities: list[str] | None = None,
+    facilitator_roles: list[str] | None = None,
 ) -> None:
     profile = {
         "id": "profile.play",
         "version": "1",
         "mechanics_level": 0,
         "capabilities": capabilities or [],
-        "authority": {"facilitator_roles": ["owner", "dm"]},
+        "authority": {
+            "facilitator_roles": (
+                ["owner", "dm"] if facilitator_roles is None else facilitator_roles
+            )
+        },
         "sources": [{"type": "self-authored", "citation": __file__}],
     }
     for index, action in enumerate(("create_draft", "finalize", "activate")):
@@ -529,6 +534,48 @@ def test_episode_pack_requires_signed_proposal_parent_checksum_and_all_nested_ev
         )
 
 
+def test_nonfacilitator_admin_cannot_read_or_advance_private_campaign_design(
+    tmp_path: Path,
+) -> None:
+    rt = runtime(tmp_path / "design-authority.db", proposal_secret=PROPOSAL_SECRET)
+    campaign_id = rt.campaign_create(
+        name="Separated authority", principal_id="owner", idempotency_key="campaign"
+    )["id"]
+    activate_profile(rt, campaign_id, facilitator_roles=["dm"])
+    pack_lifecycle(
+        rt,
+        campaign_id,
+        pack(
+            "module.root",
+            "1",
+            manifest("manifest.root", classification="authored_narrative"),
+        ),
+    )
+    with pytest.raises(PermissionError, match="facilitator-private"):
+        rt.query(campaign_id, principal_id="owner", kind="campaign_design")
+    revision, branch_id = state(rt, campaign_id)
+    rt.set_phase(
+        campaign_id,
+        phase="play",
+        principal_id="owner",
+        expected_revision=revision,
+        expected_branch_id=branch_id,
+        idempotency_key="play",
+    )
+    revision, branch_id = state(rt, campaign_id)
+    with pytest.raises(PermissionError, match="facilitator authority"):
+        rt.campaign_design_change(
+            campaign_id,
+            entity_type="front",
+            entity_id="front.0",
+            status="active",
+            evidence_refs=["scene:scene.gate"],
+            principal_id="owner",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="forged-progress",
+        )
+
 def test_progress_requires_legal_transition_real_branch_evidence_and_declared_opportunity(
     tmp_path: Path,
 ) -> None:
@@ -552,6 +599,56 @@ def test_progress_requires_legal_transition_real_branch_evidence_and_declared_op
         idempotency_key="play",
     )
     revision, branch_id = state(rt, campaign_id)
+    rt.scene_change(
+        campaign_id,
+        action="start",
+        scene={
+            "id": "scene.gate",
+            "title": "The gate",
+            "audience": {"scope": "public"},
+        },
+        principal_id="owner",
+        expected_revision=revision,
+        expected_branch_id=branch_id,
+        idempotency_key="visit-gate",
+    )
+    revision, branch_id = state(rt, campaign_id)
+    ended_scene = rt.scene_change(
+        campaign_id,
+        action="end",
+        scene_id="scene.gate",
+        principal_id="owner",
+        expected_revision=revision,
+        expected_branch_id=branch_id,
+        idempotency_key="leave-gate",
+    )["scene"]
+    assert ended_scene["status"] == "ended"
+    revision, branch_id = state(rt, campaign_id)
+    with pytest.raises(ValueError, match="already exists"):
+        rt.scene_change(
+            campaign_id,
+            action="start",
+            scene={
+                "id": "scene.gate",
+                "title": "Replace the prior visit",
+                "audience": {"scope": "public"},
+            },
+            principal_id="owner",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="replace-visited-scene",
+        )
+    with pytest.raises(ValueError, match="not active"):
+        rt.scene_change(
+            campaign_id,
+            action="update",
+            scene={"status": "active"},
+            scene_id="scene.gate",
+            principal_id="owner",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="reopen-ended-scene",
+        )
     with pytest.raises(ValueError, match="unsupported"):
         rt.campaign_design_change(
             campaign_id,
@@ -597,6 +694,43 @@ def test_progress_requires_legal_transition_real_branch_evidence_and_declared_op
         branch_id=branch_id,
     )
     evidence_ref = f"event:{event.id}"
+    rt.snapshot_create(
+        campaign_id,
+        label="progress branch point",
+        principal_id="owner",
+        expected_revision=revision,
+        expected_branch_id=branch_id,
+        idempotency_key="progress-branch-point",
+    )
+    revision, branch_id = state(rt, campaign_id)
+    sibling = rt.branches.create(
+        campaign_id,
+        name="unselected-progress",
+        checkout=False,
+        expected_revision=revision,
+        expected_branch_id=branch_id,
+    )
+    revision, branch_id = state(rt, campaign_id)
+    sibling_event = rt.events.add(
+        campaign_id,
+        event_type="branch-only-choice",
+        summary="A choice that occurred only on the sibling branch.",
+        payload={"scene_id": "scene.gate"},
+        audience_scope="public",
+        branch_id=sibling.id,
+    )
+    with pytest.raises(ValueError, match="missing branch evidence"):
+        rt.campaign_design_change(
+            campaign_id,
+            entity_type="front",
+            entity_id="front.0",
+            status="active",
+            evidence_refs=[f"event:{sibling_event.id}"],
+            principal_id="owner",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="cross-branch-progress",
+        )
     with pytest.raises(ValueError, match="declared opportunities"):
         rt.campaign_design_change(
             campaign_id,
@@ -621,6 +755,88 @@ def test_progress_requires_legal_transition_real_branch_evidence_and_declared_op
         idempotency_key="chosen-opportunity",
     )
     assert completed["change"]["status"] == "completed"
+    revision, branch_id = state(rt, campaign_id)
+    with pytest.raises(ValueError, match="illegal character_arc progress transition"):
+        rt.campaign_design_change(
+            campaign_id,
+            entity_type="character_arc",
+            entity_id="arc.0",
+            status="active",
+            evidence_refs=[evidence_ref],
+            principal_id="owner",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="reopen-completed-arc",
+        )
+
+    for entity_type, entity_id, terminal, regressed in (
+        ("front", "front.0", "resolved", "active"),
+        ("thread", "thread.0", "resolved", "active"),
+    ):
+        advanced = rt.campaign_design_change(
+            campaign_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            status=terminal,
+            evidence_refs=[evidence_ref],
+            principal_id="owner",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key=f"finish-{entity_type}",
+        )
+        assert advanced["change"]["status"] == terminal
+        revision, branch_id = state(rt, campaign_id)
+        with pytest.raises(ValueError, match=f"illegal {entity_type} progress transition"):
+            rt.campaign_design_change(
+                campaign_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                status=regressed,
+                evidence_refs=[evidence_ref],
+                principal_id="owner",
+                expected_revision=revision,
+                expected_branch_id=branch_id,
+                idempotency_key=f"reopen-{entity_type}",
+            )
+
+    discovered = rt.campaign_design_change(
+        campaign_id,
+        entity_type="clue",
+        entity_id="clue.0",
+        status="discovered",
+        evidence_refs=[evidence_ref],
+        principal_id="owner",
+        expected_revision=revision,
+        expected_branch_id=branch_id,
+        idempotency_key="discover-clue",
+    )
+    assert discovered["change"]["status"] == "discovered"
+    revision, branch_id = state(rt, campaign_id)
+    interpreted = rt.campaign_design_change(
+        campaign_id,
+        entity_type="clue",
+        entity_id="clue.0",
+        status="interpreted",
+        evidence_refs=[evidence_ref],
+        principal_id="owner",
+        expected_revision=revision,
+        expected_branch_id=branch_id,
+        idempotency_key="interpret-clue",
+    )
+    assert interpreted["change"]["status"] == "interpreted"
+    revision, branch_id = state(rt, campaign_id)
+    with pytest.raises(ValueError, match="illegal clue progress transition"):
+        rt.campaign_design_change(
+            campaign_id,
+            entity_type="clue",
+            entity_id="clue.0",
+            status="discovered",
+            evidence_refs=[evidence_ref],
+            principal_id="owner",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="retract-interpreted-clue",
+        )
 
 
 def test_modern_conflict_tools_block_progress_and_expansion_at_runtime_boundary(

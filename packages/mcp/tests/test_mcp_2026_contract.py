@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
+from jsonschema import Draft202012Validator
 from mcp import Client
 from mcp.server.mcpserver import Context
 from sagasmith_core.auth_context import (
@@ -258,6 +259,238 @@ def test_modern_actor_query_projects_private_fields_by_actor_grant(tmp_path: Pat
         private = await query("user:trusted", "actor-view-private")
         assert private["sheet"]["oath"] == "Never reveal the hidden bell."
         assert private["notes"]["motive"] == "Protect the ferryman."
+
+    asyncio.run(exercise())
+
+
+def test_modern_actor_memory_prioritizes_direct_current_basis_refs(tmp_path: Path) -> None:
+    async def exercise() -> None:
+        server = create_server(
+            McpConfig(
+                database_url=sqlite_database_url(tmp_path / "modern-memory.db"),
+                auth_context_secret=SECRET,
+            )
+        )
+        runtime = server.runtime
+        campaign = runtime.campaign_create(
+            name="Modern memory",
+            principal_id="user:authorized",
+            idempotency_key="campaign",
+        )
+        campaign_id = campaign["id"]
+        revision = runtime.campaigns.get(campaign_id).revision
+        branch_id = runtime.branch_id(campaign_id)
+        actor = runtime.actor_create(
+            campaign_id,
+            actor={"name": "Ilyra", "type": "npc", "sheet": {}},
+            principal_id="user:authorized",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="actor",
+        )
+        revision = runtime.campaigns.get(campaign_id).revision
+        unrelated_actor = runtime.actor_create(
+            campaign_id,
+            actor={"name": "Mara", "type": "npc", "sheet": {}},
+            principal_id="user:authorized",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="unrelated-actor",
+        )
+        focused = runtime.events.add(
+            campaign_id,
+            event_type="quiet",
+            summary="Quiet but current.",
+            audience_scope="public",
+            participants=[{"actor_id": actor["id"], "role": "speaker"}],
+        )
+        for index in range(201):
+            runtime.events.add(
+                campaign_id,
+                event_type="loud",
+                summary=f"Loud but less current {index}.",
+                payload={"importance": 5},
+                audience_scope="public",
+                participants=[{"actor_id": actor["id"], "role": "speaker"}],
+            )
+        unrelated = runtime.events.add(
+            campaign_id,
+            event_type="other-actor",
+            summary="Another actor's private continuity.",
+            audience_scope="public",
+            participants=[{"actor_id": unrelated_actor["id"], "role": "speaker"}],
+        )
+        revision = runtime.campaigns.get(campaign_id).revision
+        context = modern_context(
+            server,
+            delegated_meta(
+                nonce="actor-memory-current-ref",
+                operation="continuity_query",
+                campaign_id=campaign_id,
+                base_revision=revision,
+            ),
+        )
+        result = await server.call_tool(
+            "continuity_query",
+            {
+                "campaign_id": campaign_id,
+                "actor_id": actor["id"],
+                "purpose": "actor_memory",
+                "current_refs": [f"event:{focused.id}", f"event:{unrelated.id}"],
+                "budget_chars": 50_000,
+            },
+            context,
+        )
+        assert not result.is_error, result.structured_content
+        assert result.structured_content["memory"]["episodic"][0]["basis_ref"] == (
+            f"event:{focused.id}"
+        )
+        assert f"event:{unrelated.id}" not in {
+            item["basis_ref"] for item in result.structured_content["memory"]["episodic"]
+        }
+        tool = next(item for item in await server.list_tools() if item.name == "continuity_query")
+        Draft202012Validator(tool.output_schema).validate(result.structured_content)
+
+    asyncio.run(exercise())
+
+
+def test_modern_continuity_cursor_pages_all_streams_and_survives_restart(
+    tmp_path: Path,
+) -> None:
+    async def exercise() -> None:
+        database_url = sqlite_database_url(tmp_path / "modern-continuity-pages.db")
+        server = create_server(
+            McpConfig(database_url=database_url, auth_context_secret=SECRET)
+        )
+        runtime = server.runtime
+        campaign = runtime.campaign_create(
+            name="Paged continuity",
+            principal_id="user:authorized",
+            idempotency_key="campaign",
+        )
+        campaign_id = campaign["id"]
+        revision = runtime.campaigns.get(campaign_id).revision
+        branch_id = runtime.branch_id(campaign_id)
+        actor = runtime.actor_create(
+            campaign_id,
+            actor={"name": "Paged Actor", "type": "npc", "sheet": {}},
+            principal_id="user:authorized",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="actor",
+        )
+        for index in range(101):
+            runtime.facts.add(
+                campaign_id,
+                fact_key=f"paged.fact.{index:03d}",
+                subject_ref=actor["id"],
+                predicate="paged",
+                content=f"Paged fact {index:03d}.",
+                disclosure_scope="public",
+            )
+            runtime.knowledge.add(
+                campaign_id,
+                actor_id=actor["id"],
+                knowledge_key=f"paged.knowledge.{index:03d}",
+                proposition=f"Paged knowledge {index:03d}.",
+                disclosure_scope="owner",
+            )
+            runtime.events.add(
+                campaign_id,
+                event_type="paged",
+                summary=f"Paged event {index:03d}.",
+                audience_scope="public",
+                participants=[{"actor_id": actor["id"], "role": "speaker"}],
+            )
+
+        revision = runtime.campaigns.get(campaign_id).revision
+        base_arguments = {
+            "campaign_id": campaign_id,
+            "actor_id": actor["id"],
+            "purpose": "continuity",
+            "query": "paged",
+            "limit": 40,
+            "budget_chars": 100_000,
+        }
+
+        async def page(current_server, nonce: str, cursor: str | None = None):
+            arguments = dict(base_arguments)
+            if cursor is not None:
+                arguments["cursor"] = cursor
+            return await current_server.call_tool(
+                "continuity_query",
+                arguments,
+                modern_context(
+                    current_server,
+                    delegated_meta(
+                        nonce=nonce,
+                        operation="continuity_query",
+                        campaign_id=campaign_id,
+                        base_revision=revision,
+                    ),
+                ),
+            )
+
+        first = await page(server, "continuity-page-1")
+        assert not first.is_error, first.structured_content
+        first_value = first.structured_content
+        assert first_value["retrieval"]["pagination"]["offset"] == 0
+        assert first_value["next_cursor"].startswith("c1:")
+        tool = next(item for item in await server.list_tools() if item.name == "continuity_query")
+        Draft202012Validator(tool.output_schema).validate(first_value)
+
+        restarted = create_server(
+            McpConfig(database_url=database_url, auth_context_secret=SECRET)
+        )
+        second = await page(
+            restarted, "continuity-page-2", first_value["next_cursor"]
+        )
+        assert not second.is_error, second.structured_content
+        second_value = second.structured_content
+        assert second_value["retrieval"]["pagination"]["offset"] == 40
+        third = await page(
+            restarted, "continuity-page-3", second_value["next_cursor"]
+        )
+        assert not third.is_error, third.structured_content
+        third_value = third.structured_content
+        assert third_value["retrieval"]["pagination"]["offset"] == 80
+        assert third_value["next_cursor"] is None
+
+        pages = [first_value, second_value, third_value]
+        assert len({item["id"] for value in pages for item in value["facts"]}) == 101
+        assert len({item["id"] for value in pages for item in value["events"]}) == 101
+        assert (
+            len(
+                {
+                    item["id"]
+                    for value in pages
+                    for item in value["actor_knowledge"]
+                }
+            )
+            == 101
+        )
+
+        tampered = first_value["next_cursor"][:-1] + (
+            "0" if first_value["next_cursor"][-1] != "0" else "1"
+        )
+        rejected = await page(restarted, "continuity-tampered", tampered)
+        assert rejected.is_error
+        wrong_query = dict(base_arguments)
+        wrong_query.update({"query": "different", "cursor": first_value["next_cursor"]})
+        cross_query = await restarted.call_tool(
+            "continuity_query",
+            wrong_query,
+            modern_context(
+                restarted,
+                delegated_meta(
+                    nonce="continuity-cross-query",
+                    operation="continuity_query",
+                    campaign_id=campaign_id,
+                    base_revision=revision,
+                ),
+            ),
+        )
+        assert cross_query.is_error
 
     asyncio.run(exercise())
 

@@ -51,6 +51,24 @@ Snapshots remain independently restorable full state documents at the public
 boundary. Core schema v8 stores each document as one bounded, checksummed
 `zlib-1` record; restore and branch checkout do not replay an ancestor chain.
 
+`continuity_query` separates ordinary continuity from four-track actor memory.
+The actor-memory purpose projects identity, motivational facts, semantic
+ActorKnowledge, and episodic events only after branch and audience authority
+checks, and can prioritize explicit current references without granting write
+authority or choosing an NPC's intent. Private NPC workers receive that bounded
+context; only selected proposals can enter authoritative settlement. Ordinary
+continuity uses a restart-stable opaque cursor bound to its campaign, branch,
+principal, actor, audience, query, limit, and budget, so campaigns can page all
+three Core streams beyond the first 100 results without facade-side reordering.
+
+Campaigns may begin with an authored Module or with a setting, opening scenes,
+and a runtime manifest that permits emergent growth. Facilitator-private
+campaign design keeps fronts, plot threads, clues, and character arcs explicit.
+Reasonable off-Atlas play uses an attested expansion proposal and a
+lineage-linked child episode Pack; it does not mutate the finalized parent Pack.
+The child follows the same draft, evidence, finalization, import, activation,
+checksum, and dependency checks as every other Pack.
+
 See [Architecture and authority](docs/architecture.md) and
 [Profile and Pack lifecycle](docs/profile-and-pack.md) for the durable product
 boundary. Three self-authored regression campaigns live in `fixtures/ash-harbor`,
