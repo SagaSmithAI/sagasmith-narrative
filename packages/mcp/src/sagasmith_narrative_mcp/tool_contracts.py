@@ -21,12 +21,45 @@ TOOL_DESCRIPTIONS = {
     "server_capabilities": "Describe Narrative authority, protocol, catalog, and identity.",
     "campaign_query": "List filtered accessible campaigns or read one campaign summary.",
     "skill_query": "List, search, or read bounded installed Narrative workflow guidance.",
-    "exposure": "Create or inspect a Host guidance handle without changing the modern catalog.",
-    "campaign_setup": "Create a campaign with an idempotent owner grant and initial branch.",
+    "exposure": (
+        "Create or inspect a Host guidance handle without changing the modern catalog. "
+        "In the legacy initialized adapter, search then set the returned handle to load "
+        "Lobby tools. In Lobby, set only tools currently available in that context; after "
+        "game_phase(phase='play'), reuse the same campaign-bound handle and search then set "
+        "the Play tools. A set containing an unavailable tool fails atomically."
+    ),
+    "campaign_setup": (
+        "Create a campaign with an idempotent owner grant and initial branch. "
+        "After creation, open a campaign-bound exposure, then query profile and Pack state; "
+        "an empty campaign has no built-in defaults, so author drafts with profile_change and "
+        "pack_change before entering Play."
+    ),
     "access_change": "Grant or revoke campaign, actor, or element authority at a revision.",
-    "profile_change": "Create, revise, finalize, or activate a versioned Narrative game profile.",
-    "pack_change": "Create, revise, finalize, import, or activate a versioned content Pack.",
-    "game_phase": "Move a campaign between lobby and play at an expected revision and branch.",
+    "profile_change": (
+        "Create, revise, finalize, or activate a versioned Narrative game profile. "
+        "Use create_draft with an authored profile document; no default profile is synthesized. "
+        'Minimal Level-0 profile JSON: {"id":"profile.example","version":"1","mechanics_level":0,'
+        '"capabilities":[],"authority":{},"actor_schema":{"type":"object"},"record_extensions":{},'
+        '"mechanics":[],"sources":[{"type":"self-authored","citation":"source"}]}. '
+        'Then finalize and '
+        "activate with profile_key='profile.example@1'."
+    ),
+    "pack_change": (
+        "Create, revise, finalize, import, or activate a versioned content Pack. "
+        "Use create_draft with an authored Pack document; no default Pack is synthesized. "
+        'Minimal campaign_seed Pack JSON: {"id":"seed.example","version":"1","title":"Seed",'
+        '"kind":"campaign_seed","profile_requirements":[],"dependencies":[],"sources":[{"type":"self-authored",'
+        '"citation":"source"}],"rights":{"distribution":"private","license":"self-authored"},'
+        '"review":{"agent_finalization":true},"content":{"principals":[],"actors":[],"records":[],'
+        '"actor_knowledge":[]}}. Then finalize, import, '
+        "and activate with pack_key='seed.example@1'; apply_seed materializes non-empty "
+        "seed entries."
+    ),
+    "game_phase": (
+        "Move a campaign between lobby and play at an expected revision and branch. After "
+        "entering Play, reuse the campaign-bound exposure handle and search then set the "
+        "tools available in Play."
+    ),
     "actor_query": "List visible actors with bounded filtering or read one authorized actor.",
     "actor_change": "Create or update one actor with optimistic revision and idempotency checks.",
     "scene_change": "Start, update, or end the current narrative scene atomically.",

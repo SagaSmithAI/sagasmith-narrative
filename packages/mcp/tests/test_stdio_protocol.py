@@ -76,6 +76,9 @@ async def _exercise_stdio(tmp_path: Path) -> None:
                 )
             )
             campaign_id = created["id"]
+            setup_binding = created["host_context_binding"]
+            assert setup_binding["campaign_id"] == campaign_id
+            assert setup_binding["branch_id"]
             value(
                 await session.call_tool("exposure", {"action": "open", "campaign_id": campaign_id})
             )

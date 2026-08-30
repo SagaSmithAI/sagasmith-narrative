@@ -83,6 +83,39 @@ def test_every_public_tool_has_a_bounded_described_precise_contract(tmp_path: Pa
     asyncio.run(exercise())
 
 
+def test_bootstrap_descriptions_explain_empty_campaign_path(tmp_path: Path) -> None:
+    async def exercise() -> None:
+        tools = {tool.name: tool for tool in await _server(tmp_path).list_tools()}
+        assert "no built-in defaults" in tools["campaign_setup"].description
+        assert "campaign-bound exposure" in tools["campaign_setup"].description
+        assert "profile_change" in tools["campaign_setup"].description
+        assert "pack_change" in tools["campaign_setup"].description
+        assert "no default profile" in tools["profile_change"].description
+        assert "no default Pack" in tools["pack_change"].description
+        assert '"id":"profile.example"' in tools["profile_change"].description
+        assert '"actor_schema":{"type":"object"}' in tools["profile_change"].description
+        assert "profile.example@1" in tools["profile_change"].description
+        assert '"kind":"campaign_seed"' in tools["pack_change"].description
+        assert '"principals":[]' in tools["pack_change"].description
+        assert "seed.example@1" in tools["pack_change"].description
+
+    asyncio.run(exercise())
+
+
+def test_phase_transition_descriptions_preserve_exposure_contract(tmp_path: Path) -> None:
+    async def exercise() -> None:
+        tools = {tool.name: tool for tool in await _server(tmp_path).list_tools()}
+        exposure = tools["exposure"].description
+        phase = tools["game_phase"].description
+        assert "Lobby" in exposure and "currently available" in exposure
+        assert "game_phase(phase='play')" in exposure
+        assert "same campaign-bound handle" in exposure
+        assert "fails atomically" in exposure
+        assert "reuse the campaign-bound exposure handle" in phase
+
+    asyncio.run(exercise())
+
+
 def test_model_repairable_errors_are_structured(tmp_path: Path) -> None:
     async def exercise() -> None:
         async with Client(_server(tmp_path), mode="2026-07-28") as client:
