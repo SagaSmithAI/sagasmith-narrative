@@ -1171,6 +1171,7 @@ def create_server(config: McpConfig | None = None) -> MCPServer:
         current_refs: list[str] | None = None,
         budget_chars: int = 8_000,
         limit: PageLimit = 50,
+        cursor: str | None = None,
         principal_id: str = LOCAL_SYSTEM_PRINCIPAL_ID,
     ) -> dict[str, Any]:
         membership = runtime.access.require_campaign(campaign_id, principal_id)
@@ -1190,6 +1191,8 @@ def create_server(config: McpConfig | None = None) -> MCPServer:
             campaign_id, principal_id, branch_id
         )
         if purpose == "actor_memory":
+            if cursor is not None:
+                raise ValueError("actor_memory continuity does not use a pagination cursor")
             if not actor_id:
                 raise ValueError("actor_memory continuity requires actor_id")
             return runtime.actor_memory_context(
@@ -1201,15 +1204,40 @@ def create_server(config: McpConfig | None = None) -> MCPServer:
                 current_refs=current_refs or [],
                 budget_chars=budget_chars,
             )
-        return runtime.continuity_context(
+        cursor_binding = {
+            "schema_version": 1,
+            "campaign_id": campaign_id,
+            "branch_id": selected_branch_id,
+            "principal_id": principal_id,
+            "actor_id": actor_id,
+            "audience": audience,
+            "query": query,
+            "limit": limit,
+            "budget_chars": budget_chars,
+        }
+        offset = runtime.continuity_cursor_offset(cursor, binding=cursor_binding)
+        result = runtime.continuity_context(
             campaign_id,
             principal_id=principal_id,
             actor_id=actor_id,
             audience=audience,
             limit=limit,
+            offset=offset,
+            budget_chars=budget_chars,
             query=query,
             branch_id=selected_branch_id,
         )
+        pagination = dict(dict(result.get("retrieval") or {}).get("pagination") or {})
+        next_offset = pagination.get("next_offset")
+        result["next_cursor"] = (
+            runtime.continuity_cursor(
+                binding=cursor_binding,
+                next_offset=int(next_offset),
+            )
+            if pagination.get("has_more") and next_offset is not None
+            else None
+        )
+        return result
 
     @mcp.tool()
     def mechanic_resolve(

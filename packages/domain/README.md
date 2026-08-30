@@ -12,6 +12,9 @@ tool exposure, settlement, semantic interpretation, or narration.
 
 - immutable game-profile and Pack document shapes;
 - actor, audience, controller, record, scene, and conflict declarations;
+- runtime-manifest and campaign-design validation for authored or emergent
+  episodes, including fronts, threads, clues, character arcs, and child-Pack
+  lineage evidence;
 - bounded Level 1 mechanics: dice pools, tables, track deltas, and resource
   deltas;
 - deterministic JSON Schema validation and checksums.

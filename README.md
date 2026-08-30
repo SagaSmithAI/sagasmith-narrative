@@ -54,6 +54,17 @@ flowchart LR
   decisions, continuity procedures, and prose. They never write the database
   directly or silently fall back to a private protocol.
 
+Long campaigns can start from a complete authored Module or from a smaller
+setting-and-opening-scene seed. `continuity_query` can return a bounded,
+audience-filtered four-track actor-memory context (identity, motivational,
+semantic, and episodic) for NPC and PC decisions. Facilitator-private campaign
+design tracks fronts, plot threads, clues, and character arcs independently of
+the public scene record. When play reaches a reasonable place outside the
+current Atlas, a signed expansion proposal can become a lineage-linked child
+episode Pack through the normal draft, review, finalize, import, and activation
+lifecycle; an authored Module therefore remains expandable without silently
+rewriting its source Pack.
+
 ## Keeping the tool list accurate and small
 
 Modern `tools/list` is the complete, deterministically sorted catalog for an

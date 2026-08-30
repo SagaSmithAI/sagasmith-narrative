@@ -20,6 +20,10 @@ The MCP owns:
   protection, and actor-sheet updates under profile-aware authority;
 - typed narrative records, scenes, conflicts, downtime, world turns, facts,
   actor knowledge, events, and atomic settlement;
+- audience-filtered four-track actor-memory retrieval for identity,
+  motivational, semantic, and episodic context;
+- facilitator-private fronts, plot threads, clues, and character arcs, plus
+  signed off-Atlas expansion into lineage-linked child episode Packs;
 - isolated NPC conversation journals and selected-proposal settlement;
 - snapshot and branch recovery with refreshed host context.
 
@@ -68,6 +72,13 @@ with `facilitator_roles: []`, an owner can manage membership, profiles, Packs,
 and recovery but cannot read private narrative state or author objective facts
 without actor or element authority. Element grants may be scoped to a scene and
 can rotate without creating a hidden permanent GM.
+
+Campaign design is part of that private narrative state. Reading or advancing
+fronts, threads, clues, and character arcs requires active facilitator authority
+in addition to the administrative write gate. Expansion proposals are
+zero-tool, bounded recommendations: the MCP signs their parent checksum,
+lineage, and evidence envelope, while a later authoritative Pack lifecycle
+performs the actual state change.
 
 That separation also applies to actor reads, ActorKnowledge writes, NPC
 activation, event participants, and scene lifecycle. Scene start/update/end

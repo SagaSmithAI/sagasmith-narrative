@@ -206,10 +206,11 @@ def select_actor_memory_context(
     terms = sorted(set(_TOKEN_RE.findall(query.casefold())))
     ranked = []
     for item in deduplicated.values():
+        candidate_refs = {item["basis_ref"], *item["refs"]}
         haystack = " ".join(
             [item["content"], item["basis_ref"], *item["refs"], _canonical(item["record"])]
         ).casefold()
-        exact = len(refs.intersection(item["refs"]))
+        exact = len(refs.intersection(candidate_refs))
         lexical = sum(term in haystack for term in terms)
         score = (
             exact * 1_000_000

@@ -50,6 +50,16 @@ help draft structures only when it produces this schema and stays before the
 same review/finalization boundary. D&D-specific generation templates are not a
 general narrative importer.
 
+A runtime manifest classifies a campaign as authored narrative or emergent
+play and declares whether episode expansion is allowed. A campaign can start
+from a setting and a few opening scenes, or expand a complete Module when play
+reaches a reasonable off-Atlas location. Expansion first produces a bounded,
+signed proposal tied to the parent Pack id, version, checksum, branch, and
+evidence. Accepted material becomes a child episode Pack with explicit lineage
+and still passes the ordinary draft, update, finalize, import, activate,
+dependency, and checksum gates. The proposal itself never writes campaign
+state, and a finalized parent Pack is never edited in place.
+
 ## Included regression Packs
 
 `ash-harbor` is a facilitator-led Level 1 campaign with factions, relationships,
@@ -61,8 +71,12 @@ It uses rotating scene-scoped element stewardship, travel, promises,
 relationships, private knowledge, downtime, and world evolution. Conflict and
 mechanic tools must remain absent.
 
-Both are self-authored under Apache-2.0. Their route documents contain ten
-sessions, negative authorization and concurrency assertions, a snapshot restore,
-and a focused alternate legal ending. The parallel regression runner must prove
+`echo-manor-voices` is a 15-session, five-NPC character-performance campaign
+with private motives, false beliefs, relationship arcs, isolated dialogue, and
+a recovered alternate ending.
+
+All three are self-authored under Apache-2.0. Their route documents include
+negative authorization and concurrency assertions, snapshot recovery, and
+focused alternate legal endings. The parallel regression runner must prove
 separate campaign, branch, idempotency, audience, exposure, knowledge, and
 random-stream state.

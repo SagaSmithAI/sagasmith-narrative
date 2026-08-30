@@ -6,6 +6,17 @@ SagaSmith Narrative MCP 是长篇桌面叙事的 system-neutral 权威服务。�
 campaign、actor、phase、revision、idempotency、随机流、原子结算与私有 NPC
 conversation；Host/Agent 负责 LLM、上下文聚合、工具选择与受众决策。
 
+长期战役既可以从完整 Module 开始，也可以从基础世界设定与少量开场 Scene
+逐步扩展。`continuity_query` 的 actor-memory 模式会在分支与受众过滤后，返回
+identity、motivational、semantic、episodic 四轨角色记忆，供 PC/NPC 连贯决策使用，
+但不会替 NPC 选择意图或直接写入状态。facilitator-private 的 campaign design
+显式保存 fronts、剧情 threads、clues 与角色 arcs。合理的 off-Atlas 行动通过签名的
+扩展提案生成带 lineage 的 child episode Pack；无论起点是否为完整模组，新增内容
+仍须经过 draft、证据审查、finalize、import、activate、checksum 与依赖校验，且不会
+原地修改已 finalized 的父 Pack。普通 continuity 使用与 campaign、branch、principal、
+actor、audience、query、limit、budget 绑定的可重启不透明 cursor，可跨过首 100 条结果
+分页读取 Core 三条数据流，而不在 facade 中全量加载或重新排序。
+
 ## MCP 2026-07-28
 
 - modern `tools/list` 完整、确定排序，并以 private scope 缓存 300 秒；Host 只把

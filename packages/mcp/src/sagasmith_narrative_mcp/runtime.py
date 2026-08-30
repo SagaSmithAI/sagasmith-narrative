@@ -34,7 +34,15 @@ from sagasmith_core.database import Database
 from sagasmith_core.idempotency import request_hash
 from sagasmith_core.integrity import canonical_json
 from sagasmith_core.knowledge import ACTOR_KNOWLEDGE_DISCLOSURE_SCOPES
-from sagasmith_core.models import ActorGrant, Campaign, CampaignMembership, Character, Principal
+from sagasmith_core.models import (
+    ActorGrant,
+    ActorKnowledge,
+    Campaign,
+    CampaignMembership,
+    CampaignMemory,
+    Character,
+    Principal,
+)
 from sagasmith_core.visibility import (
     PLAYER_MEMORY_DISCLOSURE_SCOPES,
     PLAYER_OWNED_ACTOR_DISCLOSURE_SCOPES,
@@ -109,6 +117,42 @@ class NarrativeRuntime:
             + canonical_json(value).encode("utf-8")
         )
         return hmac.new(self._proposal_secret, message, hashlib.sha256).hexdigest()
+
+    def continuity_cursor(
+        self, *, binding: Mapping[str, Any], next_offset: int
+    ) -> str:
+        """Issue a restart-stable cursor bound to one authorized continuity query."""
+
+        offset = int(next_offset)
+        if not 0 <= offset <= 100_000:
+            raise ValueError("continuity cursor offset is outside the supported range")
+        message = (
+            b"sagasmith-narrative/continuity-cursor/v1\0"
+            + canonical_json({"binding": dict(binding), "offset": offset}).encode("utf-8")
+        )
+        signature = hmac.new(self._proposal_secret, message, hashlib.sha256).hexdigest()
+        return f"c1:{offset}:{signature}"
+
+    def continuity_cursor_offset(
+        self, cursor: str | None, *, binding: Mapping[str, Any]
+    ) -> int:
+        """Validate an opaque query-bound cursor and return its Core offset."""
+
+        if cursor is None:
+            return 0
+        value = required_text(cursor, "cursor", limit=128)
+        parts = value.split(":")
+        if len(parts) != 3 or parts[0] != "c1" or not parts[1].isdigit():
+            raise ValueError("continuity cursor is invalid; reuse next_cursor unchanged")
+        offset = int(parts[1])
+        if not 0 <= offset <= 100_000:
+            raise ValueError("continuity cursor is invalid; reuse next_cursor unchanged")
+        expected = self.continuity_cursor(binding=binding, next_offset=offset).rsplit(":", 1)[1]
+        if not secrets.compare_digest(parts[2], expected):
+            raise ValueError(
+                "continuity cursor does not belong to this query; start a new query without it"
+            )
+        return offset
 
     def campaign_create(
         self,
@@ -405,6 +449,14 @@ class NarrativeRuntime:
     ) -> dict[str, Any]:
         """Assemble an authorized, branch-local four-track actor memory view."""
 
+        if current_refs is not None and (
+            not isinstance(current_refs, list) or len(current_refs) > 128
+        ):
+            raise ValueError("current_refs must be an array with at most 128 entries")
+        requested_current_refs = [
+            required_text(item, "current_refs[]", limit=300)
+            for item in current_refs or []
+        ]
         membership = self.access.require_campaign(campaign_id, principal_id)
         document = narrative_document(self.campaigns.get(campaign_id).state)
         core_actor_id = self.resolve_actor_ref(campaign_id, actor_id)
@@ -479,7 +531,29 @@ class NarrativeRuntime:
             if query.strip()
             else []
         )
-        by_event_id = {item.id: item for item in [*recent_events, *searched_events]}
+        requested_event_ids = list(
+            dict.fromkeys(
+                item.removeprefix("event:")
+                for item in requested_current_refs
+                if item.startswith("event:") and item != "event:"
+            )
+        )
+        exact_events = (
+            self.events.list_for_actor_event_ids(
+                campaign_id,
+                actor_id=core_actor_id,
+                event_ids=requested_event_ids,
+                knowledge_disclosure_scopes=allowed_knowledge_scopes,
+                audience="dm" if facilitator else "player",
+                branch_id=selected_branch_id,
+            )
+            if requested_event_ids
+            else []
+        )
+        by_event_id = {
+            item.id: item
+            for item in [*recent_events, *searched_events, *exact_events]
+        }
         if not facilitator:
             facts = [
                 item for item in facts if item.disclosure_scope in PLAYER_MEMORY_DISCLOSURE_SCOPES
@@ -498,7 +572,12 @@ class NarrativeRuntime:
                 )
                 if item
             }
-            explicitly_current = str(record.get("id") or "") in set(current_refs or [])
+            record_id = str(record.get("id") or "")
+            requested_refs = set(requested_current_refs)
+            explicitly_current = bool(
+                record_id
+                and ({record_id, f"record:{record_id}"} & requested_refs)
+            )
             if not (logical_actor_refs.intersection(relevant_refs) or explicitly_current):
                 continue
             if not self._record_visible(
@@ -530,7 +609,10 @@ class NarrativeRuntime:
                         or record.get("title")
                         or record.get("id")
                     ),
-                    "metadata": {"record_id": str(record["id"])},
+                    "metadata": {
+                        "record_id": str(record["id"]),
+                        "record_ref": f"record:{record['id']}",
+                    },
                 }
             )
         actor_projection = asdict(actor)
@@ -545,7 +627,7 @@ class NarrativeRuntime:
             actor_state=actor_projection,
             actor_knowledge=by_knowledge_id.values(),
             events=by_event_id.values(),
-            current_refs=current_refs or [],
+            current_refs=requested_current_refs,
             query=query,
             budget_chars=budget_chars,
         )
@@ -582,6 +664,8 @@ class NarrativeRuntime:
         limit: int,
         query: str,
         branch_id: str | None,
+        offset: int = 0,
+        budget_chars: int = 12_000,
     ) -> dict[str, Any]:
         """Read ordinary continuity through the same branch authority gate."""
 
@@ -593,6 +677,8 @@ class NarrativeRuntime:
             actor_id=actor_id,
             audience=audience,
             limit=limit,
+            offset=offset,
+            budget_chars=budget_chars,
             query=query,
             branch_id=selected_branch_id,
         )
@@ -1623,7 +1709,9 @@ class NarrativeRuntime:
                 ),
             }
         if kind == "campaign_design":
-            if membership.role not in ADMIN_ROLES:
+            if membership.role not in ADMIN_ROLES or not self._has_facilitator_authority(
+                document, membership.role
+            ):
                 raise PermissionError("campaign design is facilitator-private")
             return deepcopy(document.get("campaign_design") or {})
         if kind == "scene":
@@ -1894,11 +1982,16 @@ class NarrativeRuntime:
     ) -> dict[str, Any]:
         """Advance one declared narrative line with explicit play evidence."""
 
+        membership = self.access.require_campaign(campaign_id, str(common["principal_id"]))
         current_document = narrative_document(self.campaigns.get(campaign_id).state)
+        if not self._has_facilitator_authority(current_document, membership.role):
+            raise PermissionError("campaign progress requires facilitator authority")
         if current_document["phase"] != PHASE_PLAY or current_document.get("conflict"):
             raise ValueError("campaign progress changes require non-conflict Play")
 
         def mutate(document: dict[str, Any]) -> dict[str, Any]:
+            if not self._has_facilitator_authority(document, membership.role):
+                raise PermissionError("campaign progress requires facilitator authority")
             if document["phase"] != PHASE_PLAY or document.get("conflict"):
                 raise ValueError("campaign progress changes require non-conflict Play")
             design = dict(document.get("campaign_design") or {})
@@ -3223,6 +3316,24 @@ class NarrativeRuntime:
     ) -> dict[str, Any]:
         """Atomically settle campaign state, event, facts, knowledge and snapshot."""
 
+        if not isinstance(event, Mapping):
+            raise ValueError("event must be an object")
+        for field, values in (
+            ("record_changes", record_changes),
+            ("facts", facts),
+            ("actor_knowledge", actor_knowledge),
+        ):
+            if values is not None and (not isinstance(values, list) or len(values) > 128):
+                raise ValueError(f"{field} must be an array with at most 128 entries")
+            if any(not isinstance(item, Mapping) for item in values or []):
+                raise ValueError(f"{field} entries must be objects")
+        participants_input = event.get("participants")
+        if participants_input is not None and (
+            not isinstance(participants_input, list) or len(participants_input) > 128
+        ):
+            raise ValueError("event.participants must be an array with at most 128 entries")
+        if any(not isinstance(item, Mapping) for item in participants_input or []):
+            raise ValueError("event.participants entries must be objects")
         key = required_text(idempotency_key, "idempotency_key", limit=200)
         scope = f"narrative:settle:{campaign_id}:{expected_branch_id}:{principal_id}"
         request = {
@@ -3238,6 +3349,8 @@ class NarrativeRuntime:
             "selected_proposal_ids": _selected_proposal_ids or [],
             "private_worker_id": _private_worker_id,
         }
+        if len(canonical_json(request)) > 1_000_000:
+            raise ValueError("narrative settlement exceeds 1000000 canonical characters")
         membership = self.access.require_campaign(campaign_id, principal_id)
         role = membership.role
         if role == "observer":
@@ -3372,6 +3485,18 @@ class NarrativeRuntime:
             if facts and not self._has_facilitator_authority(document, role):
                 for fact in facts:
                     subject_ref = str(fact.get("subject_ref") or "")
+                    if str(fact.get("action") or "upsert") == "revise":
+                        memory_id = required_text(
+                            fact.get("memory_id"), "fact memory_id", limit=200
+                        )
+                        persisted = session.get(CampaignMemory, memory_id)
+                        if persisted is None or persisted.campaign_id != campaign_id:
+                            raise LookupError(memory_id)
+                        if subject_ref and subject_ref != str(persisted.subject_ref or ""):
+                            raise PermissionError(
+                                "fact revision subject does not match its persisted target"
+                            )
+                        subject_ref = str(persisted.subject_ref or "")
                     subject_record = document["records"].get(subject_ref)
                     if subject_record is not None and self._record_authorized(
                         document,
@@ -3413,6 +3538,18 @@ class NarrativeRuntime:
             for item in actor_knowledge or []:
                 actor_ref = str(item.get("actor_id") or "")
                 actor_id = document.get("actor_bindings", {}).get(actor_ref, actor_ref)
+                if str(item.get("action") or "add") == "revise":
+                    knowledge_id = required_text(
+                        item.get("knowledge_id"), "knowledge_id", limit=200
+                    )
+                    persisted = session.get(ActorKnowledge, knowledge_id)
+                    if persisted is None or persisted.campaign_id != campaign_id:
+                        raise LookupError(knowledge_id)
+                    if actor_id != persisted.actor_id:
+                        raise PermissionError(
+                            "actor-knowledge revision actor does not match its persisted target"
+                        )
+                    actor_id = persisted.actor_id
                 if not self._actor_authorized(
                     document,
                     campaign_id=campaign_id,
@@ -3561,6 +3698,24 @@ class NarrativeRuntime:
         **common: Any,
     ) -> dict[str, Any]:
         payload = deepcopy(dict(data or {}))
+        if len(canonical_json(payload)) > 1_000_000:
+            raise ValueError("NPC conversation data exceeds 1000000 canonical characters")
+
+        def bounded_list(value: Any, field: str, maximum: int) -> list[Any]:
+            if value is None:
+                return []
+            if not isinstance(value, list) or len(value) > maximum:
+                raise ValueError(f"{field} must be an array with at most {maximum} entries")
+            return list(value)
+
+        def bounded_strings(
+            value: Any, field: str, maximum: int, *, item_limit: int = 300
+        ) -> list[str]:
+            return [
+                required_text(item, f"{field}[]", limit=item_limit)
+                for item in bounded_list(value, field, maximum)
+            ]
+
         if action != "open":
             self._require_live_npc_conversation_access(
                 campaign_id,
@@ -3576,23 +3731,37 @@ class NarrativeRuntime:
                 current_profile.get("capabilities") or []
             ):
                 raise ValueError("active profile does not provide NPC conversation")
-            settlement = deepcopy(dict(payload.get("settlement") or {}))
+            raw_settlement = payload.get("settlement")
+            if not isinstance(raw_settlement, Mapping):
+                raise ValueError("NPC conversation settlement must be an object")
+            settlement = deepcopy(dict(raw_settlement))
+            raw_event = settlement.get("event")
+            if not isinstance(raw_event, Mapping):
+                raise ValueError("NPC conversation settlement.event must be an object")
             return self.narrative_settle(
                 campaign_id,
                 principal_id=common["principal_id"],
                 expected_revision=common["expected_revision"],
                 expected_branch_id=common["expected_branch_id"],
                 idempotency_key=common["idempotency_key"],
-                event=deepcopy(dict(settlement.get("event") or {})),
-                record_changes=deepcopy(list(settlement.get("record_changes") or [])),
-                facts=deepcopy(list(settlement.get("facts") or [])),
-                actor_knowledge=deepcopy(list(settlement.get("actor_knowledge") or [])),
+                event=deepcopy(dict(raw_event)),
+                record_changes=deepcopy(
+                    bounded_list(settlement.get("record_changes"), "settlement.record_changes", 128)
+                ),
+                facts=deepcopy(bounded_list(settlement.get("facts"), "settlement.facts", 128)),
+                actor_knowledge=deepcopy(
+                    bounded_list(
+                        settlement.get("actor_knowledge"), "settlement.actor_knowledge", 128
+                    )
+                ),
                 snapshot=deepcopy(settlement.get("snapshot")),
                 _close_conversation_id=required_text(conversation_id, "conversation_id", limit=100),
-                _selected_proposal_ids=[
-                    required_text(item, "selected_proposal_id", limit=100)
-                    for item in payload.get("selected_proposal_ids", [])
-                ],
+                _selected_proposal_ids=bounded_strings(
+                    payload.get("selected_proposal_ids"),
+                    "selected_proposal_ids",
+                    256,
+                    item_limit=100,
+                ),
                 _private_worker_id=str(payload.get("close_token") or ""),
             )
 
@@ -3633,18 +3802,25 @@ class NarrativeRuntime:
                 raise ValueError("NPC conversation interlocutors have unsupported fields")
             actor_ids = [
                 self.resolve_actor_ref(campaign_id, str(item))
-                for item in interlocutors.get("actor_ids") or []
+                for item in bounded_strings(
+                    interlocutors.get("actor_ids"), "interlocutors.actor_ids", 64
+                )
             ]
             if prepared_actor_id in actor_ids:
                 raise ValueError("the NPC worker cannot be its own interlocutor")
             for actor_id in actor_ids:
                 self.characters.get(actor_id)
-            principal_ids = [str(item) for item in interlocutors.get("principal_ids") or []]
+            principal_ids = bounded_strings(
+                interlocutors.get("principal_ids"), "interlocutors.principal_ids", 64
+            )
             for principal_id in principal_ids:
                 self.access.require_campaign(campaign_id, principal_id)
-            publication_scopes = [
-                str(item) for item in interlocutors.get("publication_scopes") or []
-            ]
+            publication_scopes = bounded_strings(
+                interlocutors.get("publication_scopes"),
+                "interlocutors.publication_scopes",
+                6,
+                item_limit=64,
+            )
             if not actor_ids and not principal_ids:
                 raise ValueError("NPC conversation requires at least one interlocutor")
             if not publication_scopes or len(publication_scopes) != len(
@@ -3660,9 +3836,15 @@ class NarrativeRuntime:
                 campaign_id,
                 actor_id=prepared_actor_id,
                 principal_id=str(common["principal_id"]),
-                query=str(payload.get("query") or ""),
+                query=(
+                    required_text(payload.get("query"), "query", limit=2_000)
+                    if payload.get("query")
+                    else ""
+                ),
                 branch_id=str(common["expected_branch_id"]),
-                current_refs=[str(item) for item in payload.get("current_refs") or []],
+                current_refs=bounded_strings(
+                    payload.get("current_refs"), "current_refs", 128
+                ),
             )
         elif action == "refresh":
             identifier = required_text(conversation_id, "conversation_id", limit=100)
@@ -3675,13 +3857,23 @@ class NarrativeRuntime:
             prepared_actor_id = self.resolve_actor_ref(
                 campaign_id, str(current_conversation["npc_actor_id"])
             )
+            refresh_query = payload.get("query")
+            if refresh_query is None:
+                refresh_query = current_conversation.get("query")
+            normalized_refresh_query = (
+                required_text(refresh_query, "query", limit=2_000)
+                if str(refresh_query or "").strip()
+                else ""
+            )
             prepared_context = self.actor_memory_context(
                 campaign_id,
                 actor_id=prepared_actor_id,
                 principal_id=str(common["principal_id"]),
-                query=str(payload.get("query") or current_conversation.get("query") or ""),
+                query=normalized_refresh_query,
                 branch_id=str(common["expected_branch_id"]),
-                current_refs=[str(item) for item in payload.get("current_refs") or []],
+                current_refs=bounded_strings(
+                    payload.get("current_refs"), "current_refs", 128
+                ),
             )
 
         def sign(value: Mapping[str, Any], message: str) -> str:
@@ -3781,9 +3973,9 @@ class NarrativeRuntime:
                 activation["actor_runtime_id"]
             ):
                 raise ValueError("proposal actor runtime does not match its activation")
-            segments = proposal.get("utterance_segments") or []
-            if not isinstance(segments, list) or len(segments) > 32:
-                raise ValueError("utterance_segments must be a bounded list")
+            segments = bounded_list(
+                proposal.get("utterance_segments"), "utterance_segments", 32
+            )
             allowed_refs = set(
                 dict(value["private_context"])["constraints"]["allowed_basis_refs"]
             )
@@ -3799,8 +3991,16 @@ class NarrativeRuntime:
                 mode = str(segment.get("content_mode") or "")
                 if mode not in {"nonfactual", "grounded", "deception", "uncertain"}:
                     raise ValueError("utterance content_mode is unsupported")
-                refs = [str(item) for item in segment.get("basis_refs") or []]
-                targets = [str(item) for item in segment.get("targets") or []]
+                refs = bounded_strings(
+                    segment.get("basis_refs"),
+                    f"utterance_segments[{index}].basis_refs",
+                    128,
+                )
+                targets = bounded_strings(
+                    segment.get("targets"),
+                    f"utterance_segments[{index}].targets",
+                    64,
+                )
                 if unknown := sorted(set(targets) - allowed_targets):
                     raise PermissionError(
                         f"utterance targets undeclared interlocutors: {unknown}"
@@ -3819,10 +4019,39 @@ class NarrativeRuntime:
                         "content_mode": mode,
                         "basis_refs": refs,
                         "targets": targets,
-                        "language": str(segment.get("language") or ""),
-                        "delivery": str(segment.get("delivery") or ""),
+                        "language": (
+                            required_text(
+                                segment.get("language"),
+                                f"utterance_segments[{index}].language",
+                                limit=100,
+                            )
+                            if segment.get("language")
+                            else ""
+                        ),
+                        "delivery": (
+                            required_text(
+                                segment.get("delivery"),
+                                f"utterance_segments[{index}].delivery",
+                                limit=300,
+                            )
+                            if segment.get("delivery")
+                            else ""
+                        ),
                     }
                 )
+            memory_candidates = []
+            for index, item in enumerate(
+                bounded_list(
+                    proposal.get("memory_candidates"), "proposal.memory_candidates", 32
+                )
+            ):
+                if not isinstance(item, Mapping):
+                    raise ValueError(f"proposal.memory_candidates[{index}] must be an object")
+                if len(canonical_json(item)) > 4_000:
+                    raise ValueError(
+                        f"proposal.memory_candidates[{index}] exceeds 4000 characters"
+                    )
+                memory_candidates.append(deepcopy(dict(item)))
             return {
                 "schema_version": 1,
                 "activation_id": str(activation["id"]),
@@ -3833,8 +4062,10 @@ class NarrativeRuntime:
                     limit=2_000,
                 ),
                 "utterance_segments": normalized_segments,
-                "visible_cues": [str(item) for item in proposal.get("visible_cues") or []],
-                "memory_candidates": deepcopy(list(proposal.get("memory_candidates") or [])),
+                "visible_cues": bounded_strings(
+                    proposal.get("visible_cues"), "proposal.visible_cues", 32, item_limit=1_000
+                ),
+                "memory_candidates": memory_candidates,
             }
 
         def mutate(document: dict[str, Any]) -> dict[str, Any]:
@@ -3871,13 +4102,21 @@ class NarrativeRuntime:
                     "runtime_secret": secrets.token_hex(32),
                     "owner_principal_id": common["principal_id"],
                     "interlocutors": deepcopy(prepared_interlocutors),
-                    "query": str(payload.get("query") or ""),
+                    "query": (
+                        required_text(payload.get("query"), "query", limit=2_000)
+                        if payload.get("query")
+                        else ""
+                    ),
                     "private_context": deepcopy(prepared_context),
                     "activations": [
                         {
                             "id": activation_id,
                             "actor_runtime_id": actor_runtime_id,
-                            "reason": str(payload.get("reason") or "conversation opened"),
+                            "reason": required_text(
+                                payload.get("reason") or "conversation opened",
+                                "reason",
+                                limit=1_000,
+                            ),
                             "from_cursor": 0,
                             "to_cursor": 0,
                             "status": "pending",
@@ -3945,6 +4184,8 @@ class NarrativeRuntime:
                     },
                 }
             if action == "refresh":
+                if len(value.get("activations") or []) >= 64:
+                    raise ValueError("NPC conversation activation history is full")
                 old = next(
                     (
                         item
@@ -3978,6 +4219,8 @@ class NarrativeRuntime:
                     "activation": public_activation(value, replacement),
                 }
             if action == "propose":
+                if len(value.get("proposals") or []) >= 256:
+                    raise ValueError("NPC conversation proposal journal is full")
                 activation = find_activation(value, str(payload.get("activation_ref") or ""))
                 lease = dict(activation.get("lease") or {})
                 if lease.get("id") != str(payload.get("lease_id") or ""):
@@ -4084,7 +4327,16 @@ class NarrativeRuntime:
                 value["context_revision"] = int(common["expected_revision"]) + 1
                 return {"conversation_id": identifier, "publication": publication}
             if action in {"close", "abort"}:
-                selected_ids = list(dict.fromkeys(payload.get("selected_proposal_ids") or []))
+                selected_ids = list(
+                    dict.fromkeys(
+                        bounded_strings(
+                            payload.get("selected_proposal_ids"),
+                            "selected_proposal_ids",
+                            256,
+                            item_limit=100,
+                        )
+                    )
+                )
                 proposal_by_id = {str(item["id"]): item for item in value.get("proposals", [])}
                 if action == "abort" and selected_ids:
                     raise ValueError("aborted NPC conversation cannot accept proposals")

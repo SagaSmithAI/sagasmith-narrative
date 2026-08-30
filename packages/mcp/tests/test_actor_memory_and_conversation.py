@@ -229,6 +229,22 @@ def test_actor_memory_current_refs_rank_exact_context_and_deduplicate_revisions(
         "candidate_count"
     ]
 
+    direct = select_actor_memory_context(
+        actor_state={"id": "actor.one", "name": "One"},
+        actor_knowledge=[
+            {"id": "knowledge.focus", "proposition": "Quiet memory."},
+            {"id": "knowledge.loud", "proposition": "Loud memory.", "importance": 5},
+        ],
+        events=[
+            {"id": "event.focus", "summary": "Quiet event."},
+            {"id": "event.loud", "summary": "Loud event.", "importance": 5},
+        ],
+        current_refs=["knowledge:knowledge.focus", "event:event.focus"],
+        budget_chars=50_000,
+    )
+    assert direct["semantic"][0]["basis_ref"] == "knowledge:knowledge.focus"
+    assert direct["episodic"][0]["basis_ref"] == "event:event.focus"
+
 
 def test_actor_memory_filters_core_scopes_and_narrative_audiences_before_diagnostics(
     tmp_path: Path,
@@ -404,7 +420,7 @@ def test_actor_memory_searches_old_branch_events_and_is_branch_isolated(tmp_path
         campaign_id,
         actor_id=npc["id"],
         principal_id="owner",
-        query="red-lantern-child-only",
+        current_refs=[f"event:{child_only.id}"],
         budget_chars=50_000,
     )["memory"]
     assert not any(
@@ -415,7 +431,7 @@ def test_actor_memory_searches_old_branch_events_and_is_branch_isolated(tmp_path
         actor_id=npc["id"],
         principal_id="owner",
         branch_id=child.id,
-        query="red-lantern-child-only",
+        current_refs=[f"event:{child_only.id}"],
         budget_chars=50_000,
     )["memory"]
     assert any(item["record"]["id"] == child_only.id for item in historical["episodic"])
@@ -795,7 +811,6 @@ def test_persistent_zero_tool_conversation_refreshes_actor_local_activation(tmp_
         npc_actor_id=npc["id"],
         data={
             "reason": "the player asks about the bell",
-            "query": "bell",
             "interlocutors": {
                 "principal_ids": ["owner"],
                 "publication_scopes": ["public"],
@@ -833,7 +848,7 @@ def test_persistent_zero_tool_conversation_refreshes_actor_local_activation(tmp_
         campaign_id,
         action="refresh",
         conversation_id=opened["conversation"]["id"],
-        data={"query": "bell"},
+        data={},
         principal_id="owner",
         expected_revision=revision,
         expected_branch_id=branch_id,
@@ -963,6 +978,89 @@ def test_persistent_zero_tool_conversation_refreshes_actor_local_activation(tmp_
     assert "Conceal responsibility" not in str(closed)
 
 
+def test_conversation_rejects_unbounded_memory_candidate_journal(tmp_path: Path) -> None:
+    rt = runtime(tmp_path / "conversation-bounds.db")
+    campaign_id = setup_campaign(rt)
+    npc = actor(rt, campaign_id)
+    enter_play(rt, campaign_id)
+    revision, branch_id = state(rt, campaign_id)
+    opened = rt.npc_conversation(
+        campaign_id,
+        action="open",
+        npc_actor_id=npc["id"],
+        data={
+            "reason": "bounded interview",
+            "interlocutors": {
+                "principal_ids": ["owner"],
+                "publication_scopes": ["public"],
+            },
+        },
+        principal_id="owner",
+        expected_revision=revision,
+        expected_branch_id=branch_id,
+        idempotency_key="open",
+    )
+    revision, branch_id = state(rt, campaign_id)
+    claimed = rt.npc_conversation(
+        campaign_id,
+        action="claim",
+        conversation_id=opened["conversation"]["id"],
+        data={"activation_ref": opened["activation"]["activation_ref"]},
+        principal_id="owner",
+        expected_revision=revision,
+        expected_branch_id=branch_id,
+        idempotency_key="claim",
+    )
+    revision, branch_id = state(rt, campaign_id)
+    with pytest.raises(ValueError, match="memory_candidates.*at most 32"):
+        rt.npc_conversation(
+            campaign_id,
+            action="propose",
+            conversation_id=opened["conversation"]["id"],
+            data={
+                "activation_ref": claimed["activation_ref"],
+                "lease_id": claimed["lease_id"],
+                "context_receipt": claimed["context_receipt"],
+                "proposal": {
+                    "schema_version": 1,
+                    "activation_id": claimed["activation_id"],
+                    "actor_runtime_id": claimed["actor_runtime_id"],
+                    "private_intent": "Keep bounded private notes.",
+                    "utterance_segments": [],
+                    "memory_candidates": [{"summary": str(index)} for index in range(33)],
+                },
+            },
+            principal_id="owner",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="oversized-memory-candidates",
+        )
+    assert state(rt, campaign_id) == (revision, branch_id)
+    with pytest.raises(ValueError, match="settlement.record_changes.*at most 128"):
+        rt.npc_conversation(
+            campaign_id,
+            action="close",
+            conversation_id=opened["conversation"]["id"],
+            data={
+                "close_token": opened["close_token"],
+                "selected_proposal_ids": [],
+                "settlement": {
+                    "event": {
+                        "event_type": "bounded.close",
+                        "summary": "Reject an oversized nested settlement.",
+                        "audience_scope": "public",
+                    },
+                    "record_changes": [{} for _ in range(129)],
+                },
+            },
+            principal_id="owner",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="oversized-nested-settlement",
+        )
+    assert state(rt, campaign_id) == (revision, branch_id)
+
+
 def test_multiple_npcs_keep_distinct_persistent_workers_across_multiple_rounds(
     tmp_path: Path,
 ) -> None:
@@ -1074,3 +1172,255 @@ def test_multiple_npcs_keep_distinct_persistent_workers_across_multiple_rounds(
     assert first_actor["id"] in first_runtime
     assert second_actor["id"] in second_runtime
     assert set(first_proposals).isdisjoint(second_proposals)
+
+
+def test_fact_revision_authorizes_the_persisted_subject(tmp_path: Path) -> None:
+    rt = runtime(tmp_path / "fact-target.db")
+    campaign_id = setup_campaign(rt, facilitator_roles=["dm"])
+    controlled = actor(rt, campaign_id, name="Controlled")
+    protected = actor(rt, campaign_id, name="Protected", idempotency_key="protected")
+    rt.access.ensure_principal("player")
+    rt.access.grant_campaign(campaign_id, "player", role="player")
+    rt.access.grant_actor(
+        campaign_id,
+        "player",
+        controlled["id"],
+        can_control=True,
+        can_view_private=True,
+    )
+    protected_fact = rt.facts.add(
+        campaign_id,
+        fact_key="protected.fact",
+        subject_ref=protected["id"],
+        predicate="secret",
+        content="Protected truth.",
+        disclosure_scope="public",
+    )
+    enter_play(rt, campaign_id)
+    revision, branch_id = state(rt, campaign_id)
+    with pytest.raises(PermissionError, match="persisted target"):
+        rt.narrative_settle(
+            campaign_id,
+            principal_id="player",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="forged-fact-revise",
+            event={
+                "event_type": "attempt",
+                "summary": "Attempt a forged fact revision.",
+                "audience_scope": "public",
+                "participants": [{"actor_id": controlled["id"], "role": "speaker"}],
+            },
+            facts=[
+                {
+                    "action": "revise",
+                    "memory_id": protected_fact.id,
+                    "expected_revision_id": protected_fact.revision_id,
+                    "subject_ref": controlled["id"],
+                    "content": "Forged truth.",
+                    "status": "active",
+                    "disclosure_scope": "public",
+                }
+            ],
+        )
+    persisted = next(item for item in rt.facts.list(campaign_id) if item.id == protected_fact.id)
+    assert persisted.content == "Protected truth."
+
+
+def test_knowledge_revision_authorizes_the_persisted_actor(tmp_path: Path) -> None:
+    rt = runtime(tmp_path / "knowledge-target.db")
+    campaign_id = setup_campaign(rt, facilitator_roles=["dm"])
+    controlled = actor(rt, campaign_id, name="Controlled")
+    protected = actor(rt, campaign_id, name="Protected", idempotency_key="protected")
+    rt.access.ensure_principal("player")
+    rt.access.grant_campaign(campaign_id, "player", role="player")
+    rt.access.grant_actor(
+        campaign_id,
+        "player",
+        controlled["id"],
+        can_control=True,
+        can_view_private=True,
+    )
+    protected_knowledge = rt.knowledge.add(
+        campaign_id,
+        actor_id=protected["id"],
+        knowledge_key="protected.knowledge",
+        proposition="Protected belief.",
+        disclosure_scope="owner",
+    )
+    enter_play(rt, campaign_id)
+    revision, branch_id = state(rt, campaign_id)
+    with pytest.raises(PermissionError, match="persisted target"):
+        rt.narrative_settle(
+            campaign_id,
+            principal_id="player",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="forged-knowledge-revise",
+            event={
+                "event_type": "attempt",
+                "summary": "Attempt a forged knowledge revision.",
+                "audience_scope": "public",
+                "participants": [{"actor_id": controlled["id"], "role": "speaker"}],
+            },
+            actor_knowledge=[
+                {
+                    "action": "revise",
+                    "actor_id": controlled["id"],
+                    "knowledge_id": protected_knowledge.id,
+                    "expected_revision_id": protected_knowledge.revision_id,
+                    "proposition": "Forged belief.",
+                    "epistemic_status": "known",
+                    "disclosure_scope": "owner",
+                }
+            ],
+        )
+    assert rt.knowledge.get(protected_knowledge.id).proposition == "Protected belief."
+
+
+def test_memory_crud_retractions_idempotency_and_restart(tmp_path: Path) -> None:
+    database_path = tmp_path / "memory-crud.db"
+    rt = runtime(database_path)
+    campaign_id = setup_campaign(rt)
+    npc = actor(rt, campaign_id)
+    enter_play(rt, campaign_id)
+    revision, branch_id = state(rt, campaign_id)
+    request = {
+        "campaign_id": campaign_id,
+        "principal_id": "owner",
+        "expected_revision": revision,
+        "expected_branch_id": branch_id,
+        "idempotency_key": "memory-add",
+        "event": {
+            "event_type": "memory.added",
+            "summary": "The actor makes and learns a promise.",
+            "audience_scope": "public",
+            "participants": [{"actor_id": npc["id"], "role": "speaker"}],
+        },
+        "record_changes": [
+            {
+                "action": "create",
+                "record": {
+                    "id": "record.promise",
+                    "kind": "relationship",
+                    "title": "Promise",
+                    "audience": {"scope": "actor", "actor_id": npc["id"]},
+                    "controller": {"actor_id": npc["id"]},
+                    "data": {"summary": "Keep the first promise."},
+                },
+            }
+        ],
+        "facts": [
+            {
+                "action": "add",
+                "fact_key": "fact.promise",
+                "subject_ref": npc["id"],
+                "predicate": "promise",
+                "content": "The first promise remains active.",
+                "disclosure_scope": "public",
+            }
+        ],
+        "actor_knowledge": [
+            {
+                "action": "add",
+                "actor_id": npc["id"],
+                "knowledge_key": "knowledge.promise",
+                "proposition": "The bell marks the promise.",
+                "disclosure_scope": "owner",
+            }
+        ],
+    }
+    added = rt.narrative_settle(**request)
+    assert json.dumps(rt.narrative_settle(**request), sort_keys=True) == json.dumps(
+        added, sort_keys=True
+    )
+
+    restarted = runtime(database_path)
+    memory = restarted.actor_memory_context(
+        campaign_id,
+        actor_id=npc["id"],
+        principal_id="owner",
+        current_refs=[
+            f"fact:{added['facts'][0]['id']}",
+            f"knowledge:{added['actor_knowledge'][0]['id']}",
+            "record:record.promise",
+        ],
+        budget_chars=50_000,
+    )["memory"]
+    assert any(
+        "first promise remains" in item["content"].casefold()
+        for item in memory["motivational"]
+    )
+    assert any("bell marks" in item["content"].casefold() for item in memory["semantic"])
+
+    revision, branch_id = state(restarted, campaign_id)
+    retract_request = {
+        "campaign_id": campaign_id,
+        "principal_id": "owner",
+        "expected_revision": revision,
+        "expected_branch_id": branch_id,
+        "idempotency_key": "memory-retract",
+        "event": {
+            "event_type": "memory.retracted",
+            "summary": "The actor releases the promise.",
+            "audience_scope": "public",
+            "participants": [{"actor_id": npc["id"], "role": "speaker"}],
+        },
+        "record_changes": [
+            {
+                "action": "update",
+                "expected_revision": 1,
+                "record": {
+                    "id": "record.promise",
+                    "kind": "relationship",
+                    "title": "Promise",
+                    "audience": {"scope": "actor", "actor_id": npc["id"]},
+                    "controller": {"actor_id": npc["id"]},
+                    "data": {"summary": "The promise was consciously released."},
+                },
+            }
+        ],
+        "facts": [
+            {
+                "action": "revise",
+                "memory_id": added["facts"][0]["id"],
+                "expected_revision_id": added["facts"][0]["revision_id"],
+                "subject_ref": npc["id"],
+                "content": "The first promise is no longer active.",
+                "status": "retracted",
+                "disclosure_scope": "public",
+            }
+        ],
+        "actor_knowledge": [
+            {
+                "action": "revise",
+                "actor_id": npc["id"],
+                "knowledge_id": added["actor_knowledge"][0]["id"],
+                "expected_revision_id": added["actor_knowledge"][0]["revision_id"],
+                "proposition": "The bell once marked the promise.",
+                "epistemic_status": "forgotten",
+                "disclosure_scope": "owner",
+            }
+        ],
+    }
+    retracted = restarted.narrative_settle(**retract_request)
+    assert json.dumps(
+        restarted.narrative_settle(**retract_request), sort_keys=True
+    ) == json.dumps(retracted, sort_keys=True)
+    final_memory = restarted.actor_memory_context(
+        campaign_id,
+        actor_id=npc["id"],
+        principal_id="owner",
+        current_refs=["record:record.promise"],
+        budget_chars=50_000,
+    )["memory"]
+    serialized = json.dumps(final_memory, ensure_ascii=False)
+    assert "The first promise remains active." not in serialized
+    assert "The bell marks the promise." not in serialized
+    assert "The promise was consciously released." in serialized
+    assert restarted.query(
+        campaign_id,
+        principal_id="owner",
+        kind="record",
+        record_id="record.promise",
+    )["revision"] == 2
