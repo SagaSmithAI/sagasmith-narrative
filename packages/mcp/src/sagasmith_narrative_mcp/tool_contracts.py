@@ -62,7 +62,11 @@ TOOL_DESCRIPTIONS = {
         "tools available in Play."
     ),
     "actor_query": "List visible actors with bounded filtering or read one authorized actor.",
-    "actor_change": "Create or update one actor with optimistic revision and idempotency checks.",
+    "actor_change": (
+        "Create or update one actor with optimistic revision and idempotency checks. "
+        "The actor input requires name for create and uses type for the character kind "
+        "(default pc); character_type is an accepted alias, and both spellings must match."
+    ),
     "scene_change": "Start, update, or end the current narrative scene atomically.",
     "narrative_query": "Read a bounded page or one profile, Pack, scene, or narrative record.",
     "campaign_design_change": "Advance one declared narrative line with explicit evidence.",
@@ -91,7 +95,12 @@ TOOL_DESCRIPTIONS = {
 
 PARAMETER_DESCRIPTIONS = {
     "action": "Requested operation for this facade tool; only the enumerated values are accepted.",
-    "actor": "Profile-defined actor document with system-specific sheet and extension fields.",
+    "actor": (
+        "Actor input with a required name when creating and a profile-defined sheet. "
+        "Use type for the character kind (for example, npc or pc); it defaults to pc "
+        "when omitted. character_type is accepted as an alias for type, and both "
+        "spellings must match when supplied."
+    ),
     "actor_id": "Authoritative actor identifier within the selected campaign.",
     "actor_knowledge": "Audience-scoped actor knowledge changes to settle atomically.",
     "add_tool_ids": "Tool identifiers to add to this Host guidance handle.",
@@ -890,6 +899,26 @@ def _bounded_input_schema(tool_name: str, schema: dict[str, Any]) -> dict[str, A
     value = deepcopy(schema)
     for name, property_schema in (value.get("properties") or {}).items():
         property_schema["description"] = PARAMETER_DESCRIPTIONS[name]
+        if tool_name == "actor_change" and name == "actor":
+            property_schema["properties"] = {
+                "character_type": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": (
+                        "Compatibility alias for actor.type; match type when both are supplied."
+                    ),
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "Human-readable actor name; required for actor creation.",
+                },
+                "type": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "Character kind, such as npc or pc; defaults to pc on create.",
+                },
+            }
         variants = property_schema.get("anyOf") or [property_schema]
         for variant in variants:
             if not isinstance(variant, dict) or variant.get("type") == "null":

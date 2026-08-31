@@ -255,6 +255,21 @@ class NarrativeRuntime:
         return document, conversation, actor_id
 
     @staticmethod
+    def _normalize_actor_input(actor: Mapping[str, Any]) -> dict[str, Any]:
+        """Normalize the public actor type spelling before any write begins."""
+
+        value = deepcopy(dict(actor))
+        if "type" in value and "character_type" in value:
+            if value["type"] != value["character_type"]:
+                raise ValueError(
+                    "actor.type and actor.character_type must match when both are provided"
+                )
+        elif "type" not in value and "character_type" in value:
+            value["type"] = value["character_type"]
+        value.pop("character_type", None)
+        return value
+
+    @staticmethod
     def _validate_actor_profile(
         profile: Mapping[str, Any] | None, actor: Mapping[str, Any]
     ) -> None:
@@ -2582,6 +2597,7 @@ class NarrativeRuntime:
         if not expected_branch_id:
             expected_branch_id = self.branch_id(campaign_id)
         self.access.require_campaign(campaign_id, principal_id, roles=ADMIN_ROLES)
+        actor = self._normalize_actor_input(actor)
         key = required_text(idempotency_key, "idempotency_key", limit=200)
         value = deepcopy(actor)
         name = required_text(value.get("name"), "actor.name", limit=200)
@@ -2688,6 +2704,7 @@ class NarrativeRuntime:
         idempotency_key: str,
     ) -> dict[str, Any]:
         membership = self.access.require_campaign(campaign_id, principal_id)
+        actor = self._normalize_actor_input(actor)
         key = required_text(idempotency_key, "idempotency_key", limit=200)
         scope = f"narrative:actor.update:{campaign_id}:{expected_branch_id}:{principal_id}"
         payload = {
