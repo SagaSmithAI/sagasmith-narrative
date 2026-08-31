@@ -172,7 +172,7 @@ class NarrativeRuntime:
             description=description,
             state=state_with_narrative({}, initial_document()),
         )
-        return asdict(info)
+        return {**asdict(info), "branch_id": self.branch_id(info.id)}
 
     def campaign_get(self, campaign_id: str, principal_id: str) -> dict[str, Any]:
         membership = self.access.require_campaign(campaign_id, principal_id)
