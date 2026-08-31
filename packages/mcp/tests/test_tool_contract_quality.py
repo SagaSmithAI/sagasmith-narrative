@@ -184,6 +184,179 @@ def test_actor_change_results_match_the_advertised_output_schema(tmp_path: Path)
     asyncio.run(exercise())
 
 
+def test_public_actor_change_type_alias_conflict_and_npc_eligibility(tmp_path: Path) -> None:
+    async def exercise() -> None:
+        server = _server(tmp_path)
+        runtime = server.runtime
+        campaign = runtime.campaign_create(
+            name="Actor type contract",
+            principal_id="system:local",
+            idempotency_key="actor-type-campaign",
+        )
+        profile = {
+            "id": "profile.actor-type",
+            "version": "1",
+            "mechanics_level": 0,
+            "capabilities": ["npc_conversation"],
+            "authority": {
+                "facilitator_roles": ["owner"],
+                "audience_scopes": ["public"],
+            },
+            "actor_schema": {"type": "object"},
+            "sources": [{"type": "self-authored", "citation": __file__}],
+        }
+
+        def state() -> tuple[int, str]:
+            return runtime.campaigns.get(campaign["id"]).revision, runtime.branch_id(campaign["id"])
+
+        revision, branch_id = state()
+        runtime.profile_change(
+            campaign["id"],
+            action="create_draft",
+            profile=profile,
+            principal_id="system:local",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="actor-type-profile-draft",
+        )
+        revision, branch_id = state()
+        runtime.profile_change(
+            campaign["id"],
+            action="finalize",
+            profile_key="profile.actor-type@1",
+            principal_id="system:local",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="actor-type-profile-finalize",
+        )
+        revision, branch_id = state()
+        runtime.profile_change(
+            campaign["id"],
+            action="activate",
+            profile_key="profile.actor-type@1",
+            principal_id="system:local",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="actor-type-profile-activate",
+        )
+        revision, branch_id = state()
+        runtime.set_phase(
+            campaign["id"],
+            phase="play",
+            principal_id="system:local",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="actor-type-play",
+        )
+
+        tools = {item.name: item for item in await server.list_tools()}
+        actor_schema = tools["actor_change"].input_schema["properties"]["actor"]
+        assert actor_schema["properties"]["name"]["type"] == "string"
+        assert actor_schema["properties"]["type"]["type"] == "string"
+        assert actor_schema["properties"]["character_type"]["type"] == "string"
+        assert "character_type" in tools["actor_change"].description
+
+        async with Client(server, mode="2026-07-28") as client:
+            revision, branch_id = state()
+            created = await client.call_tool(
+                "actor_change",
+                {
+                    "campaign_id": campaign["id"],
+                    "action": "create",
+                    "actor": {"name": "Public NPC", "type": "npc"},
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "actor-type-create",
+                },
+            )
+            assert not created.is_error, created.structured_content
+            npc = created.structured_content
+            assert npc["character_type"] == "npc"
+            assert npc["id"]
+
+            revision, branch_id = state()
+            alias_created = await client.call_tool(
+                "actor_change",
+                {
+                    "campaign_id": campaign["id"],
+                    "action": "create",
+                    "actor": {"name": "Alias NPC", "character_type": "persistent_npc"},
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "actor-type-alias-create",
+                },
+            )
+            assert not alias_created.is_error, alias_created.structured_content
+            alias_npc = alias_created.structured_content
+            assert alias_npc["character_type"] == "persistent_npc"
+
+            revision, branch_id = state()
+            unchanged_revision = revision
+            conflict = await client.call_tool(
+                "actor_change",
+                {
+                    "campaign_id": campaign["id"],
+                    "action": "create",
+                    "actor": {
+                        "name": "Rejected actor",
+                        "type": "pc",
+                        "character_type": "npc",
+                    },
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "actor-type-conflict",
+                },
+            )
+            assert conflict.is_error is True
+            assert "actor.type and actor.character_type must match" in (
+                conflict.structured_content["error"]["message"]
+            )
+            assert runtime.campaigns.get(campaign["id"]).revision == unchanged_revision
+
+            revision, branch_id = state()
+            updated = await client.call_tool(
+                "actor_change",
+                {
+                    "campaign_id": campaign["id"],
+                    "action": "update",
+                    "actor_id": npc["id"],
+                    "actor": {
+                        "character_type": "npc",
+                        "summary": "Updated through the output-compatible alias.",
+                    },
+                    "expected_actor_revision": npc["revision"],
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "actor-type-alias-update",
+                },
+            )
+            assert not updated.is_error, updated.structured_content
+            assert updated.structured_content["character_type"] == "npc"
+
+            revision, branch_id = state()
+            opened = await client.call_tool(
+                "npc_conversation",
+                {
+                    "campaign_id": campaign["id"],
+                    "action": "open",
+                    "npc_actor_id": alias_npc["id"],
+                    "data": {
+                        "interlocutors": {
+                            "principal_ids": ["system:local"],
+                            "publication_scopes": ["public"],
+                        }
+                    },
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "actor-type-conversation",
+                },
+            )
+            assert not opened.is_error, opened.structured_content
+            assert opened.structured_content["conversation"]["npc_actor_id"] == alias_npc["id"]
+
+    asyncio.run(exercise())
+
+
 def test_advertised_input_bounds_are_enforced_before_tool_execution(tmp_path: Path) -> None:
     async def exercise() -> None:
         async with Client(_server(tmp_path), mode="2026-07-28") as client:
