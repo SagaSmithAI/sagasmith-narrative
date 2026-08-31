@@ -794,7 +794,7 @@ OUTPUT_FIELDS = {
     },
     "game_phase": _WRITE_FIELDS | {"previous_phase"},
     "actor_query": _ACTOR_FIELDS | {"actors", "next_cursor"},
-    "actor_change": _WRITE_FIELDS | {"actor"},
+    "actor_change": _WRITE_FIELDS | _ACTOR_FIELDS,
     "scene_change": _WRITE_FIELDS | {"scene"},
     "narrative_query": {
         "items",
