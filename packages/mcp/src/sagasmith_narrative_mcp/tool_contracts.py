@@ -30,6 +30,7 @@ TOOL_DESCRIPTIONS = {
     ),
     "campaign_setup": (
         "Create a campaign with an idempotent owner grant and initial branch. "
+        "The result includes branch_id for the next optimistic write. "
         "After creation, open a campaign-bound exposure, then query profile and Pack state; "
         "an empty campaign has no built-in defaults, so author drafts with profile_change and "
         "pack_change before entering Play."
@@ -687,6 +688,7 @@ def _field_schema(name: str) -> dict[str, Any]:
 
 _CAMPAIGN_FIELDS = {
     "id",
+    "branch_id",
     "system_id",
     "slug",
     "name",

@@ -87,6 +87,7 @@ def test_bootstrap_descriptions_explain_empty_campaign_path(tmp_path: Path) -> N
     async def exercise() -> None:
         tools = {tool.name: tool for tool in await _server(tmp_path).list_tools()}
         assert "no built-in defaults" in tools["campaign_setup"].description
+        assert "branch_id" in tools["campaign_setup"].description
         assert "campaign-bound exposure" in tools["campaign_setup"].description
         assert "profile_change" in tools["campaign_setup"].description
         assert "pack_change" in tools["campaign_setup"].description
@@ -98,6 +99,30 @@ def test_bootstrap_descriptions_explain_empty_campaign_path(tmp_path: Path) -> N
         assert '"kind":"campaign_seed"' in tools["pack_change"].description
         assert '"principals":[]' in tools["pack_change"].description
         assert "seed.example@1" in tools["pack_change"].description
+
+    asyncio.run(exercise())
+
+
+def test_campaign_setup_returns_the_initial_branch_guard_on_replay(tmp_path: Path) -> None:
+    async def exercise() -> None:
+        server = _server(tmp_path)
+        tool = next(item for item in await server.list_tools() if item.name == "campaign_setup")
+        arguments = {
+            "action": "create",
+            "name": "Branch-ready campaign",
+            "idempotency_key": "branch-ready-campaign",
+        }
+
+        async with Client(server, mode="2026-07-28") as client:
+            created = await client.call_tool("campaign_setup", arguments)
+            replayed = await client.call_tool("campaign_setup", arguments)
+
+        assert not created.is_error, created.structured_content
+        assert not replayed.is_error, replayed.structured_content
+        assert replayed.structured_content == created.structured_content
+        result = created.structured_content
+        assert result["branch_id"] == server.runtime.branch_id(result["id"])
+        Draft202012Validator(tool.output_schema).validate(result)
 
     asyncio.run(exercise())
 
