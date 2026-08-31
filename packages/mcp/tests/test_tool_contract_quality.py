@@ -103,6 +103,412 @@ def test_bootstrap_descriptions_explain_empty_campaign_path(tmp_path: Path) -> N
     asyncio.run(exercise())
 
 
+def test_campaign_design_and_npc_lifecycle_are_discoverable_from_tools_list(
+    tmp_path: Path,
+) -> None:
+    async def exercise() -> None:
+        tools = {tool.name: tool for tool in await _server(tmp_path).list_tools()}
+        pack = tools["pack_change"]
+        pack_examples = pack.input_schema["properties"]["pack"]["examples"]
+        runtime_manifest = pack_examples[0]["content"]["runtime_manifest"]
+        assert runtime_manifest["classification"] == "emergent_seed"
+        assert runtime_manifest["atlas"]["scenes"]
+        assert runtime_manifest["fronts"]
+        assert runtime_manifest["threads"]
+        assert runtime_manifest["clues"]
+        assert runtime_manifest["character_arcs"]
+        assert "server binds" in pack.input_schema["properties"]["pack"]["description"]
+
+        conversation = tools["npc_conversation"]
+        Draft202012Validator.check_schema(conversation.input_schema)
+        variants = {
+            item["properties"]["action"]["const"]: item
+            for item in conversation.input_schema["oneOf"]
+        }
+        assert set(variants) == {
+            "open",
+            "claim",
+            "refresh",
+            "propose",
+            "publish",
+            "close",
+            "abort",
+        }
+        interlocutors = variants["open"]["properties"]["data"]["properties"][
+            "interlocutors"
+        ]["properties"]
+        assert set(interlocutors) == {
+            "actor_ids",
+            "principal_ids",
+            "publication_scopes",
+        }
+        assert "activation_ref" in variants["claim"]["properties"]["data"]["properties"]
+        propose_fields = variants["propose"]["properties"]["data"]["properties"]
+        assert set(propose_fields) == {
+            "activation_ref",
+            "lease_id",
+            "context_receipt",
+            "proposal",
+        }
+        assert "proposal_id" in variants["publish"]["properties"]["data"]["properties"]
+        assert "close_token" in variants["close"]["properties"]["data"]["properties"]
+        for source_name in (
+            "activation_ref",
+            "activation_id",
+            "actor_runtime_id",
+            "lease_id",
+            "context_receipt",
+            "proposal_id",
+            "close_token",
+        ):
+            assert source_name in conversation.description
+
+        design_schema = next(
+            item
+            for item in tools["narrative_query"].output_schema["oneOf"]
+            if item.get("title") == "narrative_queryCampaignDesignOutput"
+        )
+        assert design_schema["additionalProperties"] is False
+        assert set(design_schema["required"]) == {
+            "schema_version",
+            "campaign_mode",
+            "manifests",
+            "progress",
+        }
+
+    asyncio.run(exercise())
+
+
+def test_public_emergent_design_and_complete_npc_conversation_lifecycle(
+    tmp_path: Path,
+) -> None:
+    async def exercise() -> None:
+        server = _server(tmp_path)
+        tools = {tool.name: tool for tool in await server.list_tools()}
+        pack_example = tools["pack_change"].input_schema["properties"]["pack"][
+            "examples"
+        ][0]
+
+        async with Client(server, mode="2026-07-28") as client:
+            async def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+                Draft202012Validator(tools[name].input_schema).validate(arguments)
+                result = await client.call_tool(name, arguments)
+                assert not result.is_error, (result.structured_content, result.content)
+                assert isinstance(result.structured_content, dict)
+                return result.structured_content
+
+            campaign = await call(
+                "campaign_setup",
+                {
+                    "action": "create",
+                    "name": "Public emergent contract",
+                    "idempotency_key": "public-emergent-campaign",
+                },
+            )
+            campaign_id = campaign["id"]
+            revision = campaign["revision"]
+            branch_id = campaign["branch_id"]
+
+            profile = {
+                "id": "profile.public-emergent",
+                "version": "1",
+                "mechanics_level": 0,
+                "capabilities": ["npc_conversation"],
+                "authority": {
+                    "facilitator_roles": ["owner"],
+                    "audience_scopes": ["public"],
+                },
+                "actor_schema": {"type": "object"},
+                "record_extensions": {},
+                "mechanics": [],
+                "sources": [{"type": "self-authored", "citation": __file__}],
+            }
+            for index, action in enumerate(("create_draft", "finalize", "activate")):
+                changed = await call(
+                    "profile_change",
+                    {
+                        "campaign_id": campaign_id,
+                        "action": action,
+                        **({"profile": profile} if action == "create_draft" else {}),
+                        **(
+                            {"profile_key": "profile.public-emergent@1"}
+                            if action != "create_draft"
+                            else {}
+                        ),
+                        "expected_revision": revision,
+                        "expected_branch_id": branch_id,
+                        "idempotency_key": f"public-profile-{index}",
+                    },
+                )
+                revision = changed["campaign_revision"]
+
+            for index, action in enumerate(
+                ("create_draft", "finalize", "import", "activate")
+            ):
+                changed = await call(
+                    "pack_change",
+                    {
+                        "campaign_id": campaign_id,
+                        "action": action,
+                        **({"pack": pack_example} if action == "create_draft" else {}),
+                        **(
+                            {"pack_key": "seed.example@1"}
+                            if action != "create_draft"
+                            else {}
+                        ),
+                        "expected_revision": revision,
+                        "expected_branch_id": branch_id,
+                        "idempotency_key": f"public-pack-{index}",
+                    },
+                )
+                revision = changed["campaign_revision"]
+
+            design = await call(
+                "narrative_query",
+                {"campaign_id": campaign_id, "kind": "campaign_design"},
+            )
+            Draft202012Validator(tools["narrative_query"].output_schema).validate(design)
+            assert design["campaign_mode"] == "emergent"
+            assert design["manifests"]["seed.example@1"]["clues"][0]["id"] == "clue.key"
+
+            phase = await call(
+                "game_phase",
+                {
+                    "campaign_id": campaign_id,
+                    "phase": "play",
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "public-enter-play",
+                },
+            )
+            revision = phase["campaign_revision"]
+            npc = await call(
+                "actor_change",
+                {
+                    "campaign_id": campaign_id,
+                    "action": "create",
+                    "actor": {"name": "Gate Witness", "type": "npc"},
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "public-create-npc",
+                },
+            )
+            revision = npc["campaign_revision"]
+            scene = await call(
+                "scene_change",
+                {
+                    "campaign_id": campaign_id,
+                    "action": "start",
+                    "scene": {
+                        "id": "scene.opening",
+                        "title": "The sealed gate",
+                        "audience": {"scope": "public"},
+                    },
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "public-opening-scene",
+                },
+            )
+            revision = scene["campaign_revision"]
+            settled = await call(
+                "narrative_settle",
+                {
+                    "campaign_id": campaign_id,
+                    "event": {
+                        "event_type": "clue.found",
+                        "summary": "The wet brass key is found at the gate.",
+                        "audience_scope": "public",
+                    },
+                    "record_changes": None,
+                    "facts": None,
+                    "actor_knowledge": None,
+                    "snapshot": None,
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "public-key-found",
+                },
+            )
+            revision = settled["campaign_revision"]
+            advanced = await call(
+                "campaign_design_change",
+                {
+                    "campaign_id": campaign_id,
+                    "entity_type": "clue",
+                    "entity_id": "clue.key",
+                    "status": "discovered",
+                    "evidence_refs": [f"event:{settled['event']['id']}"],
+                    "note": "The opening scene exposed the key.",
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "public-discover-key",
+                },
+            )
+            revision = advanced["campaign_revision"]
+            assert advanced["campaign_design"]["progress"]["clue"]["clue.key"][
+                "status"
+            ] == "discovered"
+            progressed_design = await call(
+                "narrative_query",
+                {"campaign_id": campaign_id, "kind": "campaign_design"},
+            )
+            Draft202012Validator(tools["narrative_query"].output_schema).validate(
+                progressed_design
+            )
+            assert progressed_design["progress"]["clue"]["clue.key"]["history"][0][
+                "campaign_revision"
+            ] == revision
+
+            opened = await call(
+                "npc_conversation",
+                {
+                    "campaign_id": campaign_id,
+                    "action": "open",
+                    "npc_actor_id": npc["id"],
+                    "data": {
+                        "interlocutors": {
+                            "principal_ids": ["system:local"],
+                            "publication_scopes": ["public"],
+                        },
+                        "query": "What does the witness admit about the key?",
+                    },
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "public-conversation-open",
+                },
+            )
+            revision = opened["campaign_revision"]
+            conversation_id = opened["conversation"]["id"]
+            close_token = opened["close_token"]
+            refreshed = await call(
+                "npc_conversation",
+                {
+                    "campaign_id": campaign_id,
+                    "action": "refresh",
+                    "conversation_id": conversation_id,
+                    "data": {"current_refs": ["clue:clue.key"]},
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "public-conversation-refresh",
+                },
+            )
+            revision = refreshed["campaign_revision"]
+            claimed = await call(
+                "npc_conversation",
+                {
+                    "campaign_id": campaign_id,
+                    "action": "claim",
+                    "conversation_id": conversation_id,
+                    "data": {
+                        "activation_ref": refreshed["activation"]["activation_ref"]
+                    },
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "public-conversation-claim",
+                },
+            )
+            revision = claimed["campaign_revision"]
+            proposed = await call(
+                "npc_conversation",
+                {
+                    "campaign_id": campaign_id,
+                    "action": "propose",
+                    "conversation_id": conversation_id,
+                    "data": {
+                        "activation_ref": claimed["activation_ref"],
+                        "lease_id": claimed["lease_id"],
+                        "context_receipt": claimed["context_receipt"],
+                        "proposal": {
+                            "schema_version": 1,
+                            "activation_id": claimed["activation_id"],
+                            "actor_runtime_id": claimed["actor_runtime_id"],
+                            "private_intent": "Reveal only the observable gate mark.",
+                            "utterance_segments": [
+                                {
+                                    "text": "I saw that mark on the sealed gate.",
+                                    "content_mode": "nonfactual",
+                                    "basis_refs": [],
+                                    "targets": [],
+                                }
+                            ],
+                            "visible_cues": ["The witness watches the key."],
+                            "memory_candidates": [],
+                        },
+                    },
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "public-conversation-propose",
+                },
+            )
+            revision = proposed["campaign_revision"]
+            published = await call(
+                "npc_conversation",
+                {
+                    "campaign_id": campaign_id,
+                    "action": "publish",
+                    "conversation_id": conversation_id,
+                    "data": {
+                        "proposal_id": proposed["proposal_id"],
+                        "audience": {"scope": "public"},
+                    },
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "public-conversation-publish",
+                },
+            )
+            revision = published["campaign_revision"]
+            closed = await call(
+                "npc_conversation",
+                {
+                    "campaign_id": campaign_id,
+                    "action": "close",
+                    "conversation_id": conversation_id,
+                    "data": {
+                        "close_token": close_token,
+                        "selected_proposal_ids": [proposed["proposal_id"]],
+                    },
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "public-conversation-close",
+                },
+            )
+            revision = closed["campaign_revision"]
+            assert closed["status"] == "closed"
+
+            abortable = await call(
+                "npc_conversation",
+                {
+                    "campaign_id": campaign_id,
+                    "action": "open",
+                    "npc_actor_id": npc["id"],
+                    "data": {
+                        "interlocutors": {
+                            "principal_ids": ["system:local"],
+                            "publication_scopes": ["public"],
+                        }
+                    },
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "public-conversation-open-abort",
+                },
+            )
+            revision = abortable["campaign_revision"]
+            aborted = await call(
+                "npc_conversation",
+                {
+                    "campaign_id": campaign_id,
+                    "action": "abort",
+                    "conversation_id": abortable["conversation"]["id"],
+                    "data": {"close_token": abortable["close_token"]},
+                    "expected_revision": revision,
+                    "expected_branch_id": branch_id,
+                    "idempotency_key": "public-conversation-abort",
+                },
+            )
+            assert aborted["status"] == "aborted"
+
+    asyncio.run(exercise())
+
+
 def test_campaign_setup_returns_the_initial_branch_guard_on_replay(tmp_path: Path) -> None:
     async def exercise() -> None:
         server = _server(tmp_path)
