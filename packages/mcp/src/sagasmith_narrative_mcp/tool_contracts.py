@@ -48,11 +48,14 @@ TOOL_DESCRIPTIONS = {
     "pack_change": (
         "Create, revise, finalize, import, or activate a versioned content Pack. "
         "Use create_draft with an authored Pack document; no default Pack is synthesized. "
-        'Minimal campaign_seed Pack JSON: {"id":"seed.example","version":"1","title":"Seed",'
-        '"kind":"campaign_seed","profile_requirements":[],"dependencies":[],"sources":[{"type":"self-authored",'
-        '"citation":"source"}],"rights":{"distribution":"private","license":"self-authored"},'
-        '"review":{"agent_finalization":true},"content":{"principals":[],"actors":[],"records":[],'
-        '"actor_knowledge":[]}}. Then finalize, import, '
+        'The schema example begins {"id":"seed.example","kind":"campaign_seed",'
+        '"content":{"principals":[],...}}. '
+        "For authored or emergent play, put runtime_manifest under pack.content; omit its "
+        "pack_key because the server binds it to Pack id@version. The pack input schema carries "
+        "a complete minimal emergent_seed example with setting, initial Scene Atlas, front, "
+        "thread, clue, and player-opportunity character arc. sources cite the authored evidence; "
+        "rights and review record the distribution and finalization decisions. Then finalize, "
+        "import, "
         "and activate with pack_key='seed.example@1'; apply_seed materializes non-empty "
         "seed entries."
     ),
@@ -76,8 +79,16 @@ TOOL_DESCRIPTIONS = {
     "continuity_query": "Read bounded, audience-filtered continuity for a campaign or actor.",
     "mechanic_resolve": "Resolve a profile mechanic with a deterministic campaign random receipt.",
     "npc_conversation": (
-        "Open, claim, refresh, propose, publish, close, or abort a participant-bounded "
-        "private NPC conversation."
+        "Run a participant-bounded private NPC conversation through the action-discriminated "
+        "input schema. open returns conversation.id, activation.activation_ref, and close_token. "
+        "refresh returns a replacement activation_ref. claim returns the server-issued "
+        "activation_id, actor_runtime_id, lease_id, and signed context_receipt required by "
+        "propose. "
+        "propose returns proposal_id; publish consumes it with a declared audience; close accepts "
+        "only published proposal ids plus the original close_token, while abort accepts no "
+        "proposal. "
+        "After every action, pass the returned campaign_revision and branch_id to the next action; "
+        "never invent or decode opaque handles, leases, tokens, or receipts."
     ),
     "downtime_settle": "Atomically settle profile-enabled downtime and its continuity changes.",
     "world_turn_settle": "Atomically settle a profile-enabled world turn and continuity changes.",
@@ -114,7 +125,10 @@ PARAMETER_DESCRIPTIONS = {
     "conversation_id": "Opaque server-issued NPC conversation handle.",
     "current_refs": "Bounded authoritative references currently relevant to the actor or scene.",
     "cursor": "Opaque cursor from the preceding response; omit for the first page.",
-    "data": "Action-specific bounded data object; nested keys follow the active profile contract.",
+    "data": (
+        "Action-specific bounded data object. For npc_conversation, select the schema branch whose "
+        "action const matches the request; every nested key and server-issued source is declared."
+    ),
     "description": "Human-readable campaign description.",
     "element_ref": "Profile-defined authority element reference.",
     "entity_id": "Identifier of the declared front, thread, clue, or character arc.",
@@ -236,6 +250,459 @@ def _open_document(description: str) -> dict[str, Any]:
         "description": description,
         "additionalProperties": True,
     }
+
+
+def _text(*, maximum: int = 8_192, minimum: int = 0) -> dict[str, Any]:
+    schema: dict[str, Any] = {"type": "string", "maxLength": maximum}
+    if minimum:
+        schema["minLength"] = minimum
+    return schema
+
+
+def _text_list(
+    *, maximum: int, item_maximum: int = 300, minimum: int = 0, enum: list[str] | None = None
+) -> dict[str, Any]:
+    item = _text(maximum=item_maximum, minimum=1)
+    if enum is not None:
+        item["enum"] = enum
+    schema: dict[str, Any] = {
+        "type": "array",
+        "items": item,
+        "maxItems": maximum,
+        "uniqueItems": True,
+    }
+    if minimum:
+        schema["minItems"] = minimum
+    return schema
+
+
+def _npc_audience_schema() -> dict[str, Any]:
+    target_properties = {
+        "principal_id": _text(maximum=200, minimum=1),
+        "principal_ids": _text_list(maximum=128, item_maximum=200),
+        "actor_id": _text(maximum=200, minimum=1),
+        "actor_ids": _text_list(maximum=128, item_maximum=200),
+    }
+    broadcast = {
+        "type": "object",
+        "properties": {"scope": {"enum": ["table", "public", "facilitator"]}},
+        "required": ["scope"],
+        "additionalProperties": False,
+    }
+    group = {
+        "type": "object",
+        "properties": {"scope": {"const": "group"}, **deepcopy(target_properties)},
+        "required": ["scope"],
+        "anyOf": [
+            {"required": ["principal_ids"]},
+            {"required": ["actor_ids"]},
+        ],
+        "additionalProperties": False,
+    }
+    actor = {
+        "type": "object",
+        "properties": {"scope": {"const": "actor"}, **deepcopy(target_properties)},
+        "required": ["scope"],
+        "anyOf": [
+            {"required": ["actor_id"]},
+            {"required": ["actor_ids"]},
+        ],
+        "additionalProperties": False,
+    }
+    return {
+        "description": (
+            "Publication audience. Its scope must be listed in open.data.interlocutors."
+            "publication_scopes, and every target must be a declared interlocutor."
+        ),
+        "oneOf": [broadcast, group, actor],
+    }
+
+
+def _npc_context_receipt_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Copy the signed context_receipt returned by claim without alteration.",
+        "properties": {
+            "schema_version": {"const": 1},
+            "conversation_id": _text(maximum=200, minimum=1),
+            "actor_runtime_id": _text(maximum=300, minimum=1),
+            "campaign_id": _text(maximum=200, minimum=1),
+            "branch_id": _text(maximum=200, minimum=1),
+            "actor_id": _text(maximum=200, minimum=1),
+            "context_digest": _text(maximum=128, minimum=1),
+            "signature": _text(maximum=128, minimum=1),
+        },
+        "required": [
+            "schema_version",
+            "conversation_id",
+            "actor_runtime_id",
+            "campaign_id",
+            "branch_id",
+            "actor_id",
+            "context_digest",
+            "signature",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def _npc_proposal_schema() -> dict[str, Any]:
+    segment = {
+        "type": "object",
+        "properties": {
+            "text": _text(maximum=4_000, minimum=1),
+            "content_mode": {
+                "type": "string",
+                "enum": ["nonfactual", "grounded", "deception", "uncertain"],
+            },
+            "basis_refs": _text_list(maximum=128),
+            "targets": _text_list(maximum=64),
+            "language": _text(maximum=100),
+            "delivery": _text(maximum=300),
+        },
+        "required": ["text", "content_mode"],
+        "additionalProperties": False,
+    }
+    return {
+        "type": "object",
+        "description": (
+            "Private worker proposal. Copy activation_id and actor_runtime_id from claim. "
+            "grounded, deception, and uncertain segments require basis_refs allowed by claim; "
+            "targets must be declared interlocutors."
+        ),
+        "properties": {
+            "schema_version": {"const": 1},
+            "activation_id": _text(maximum=200, minimum=1),
+            "actor_runtime_id": _text(maximum=300, minimum=1),
+            "private_intent": _text(maximum=2_000),
+            "utterance_segments": {"type": "array", "items": segment, "maxItems": 32},
+            "visible_cues": _text_list(maximum=32, item_maximum=1_000),
+            "memory_candidates": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": True,
+                    "maxProperties": 128,
+                },
+                "maxItems": 32,
+            },
+        },
+        "required": [
+            "schema_version",
+            "activation_id",
+            "actor_runtime_id",
+            "utterance_segments",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def _npc_settlement_schema() -> dict[str, Any]:
+    extension_item = {
+        "type": "object",
+        "additionalProperties": True,
+        "maxProperties": 128,
+    }
+    return {
+        "type": "object",
+        "description": (
+            "Optional atomic close settlement. event is required; remaining documents follow "
+            "the same active-profile contracts as narrative_settle."
+        ),
+        "properties": {
+            "event": {
+                "type": "object",
+                "additionalProperties": True,
+                "maxProperties": 64,
+            },
+            "record_changes": {
+                "type": "array",
+                "items": deepcopy(extension_item),
+                "maxItems": 128,
+            },
+            "facts": {
+                "type": "array",
+                "items": deepcopy(extension_item),
+                "maxItems": 128,
+            },
+            "actor_knowledge": {
+                "type": "array",
+                "items": deepcopy(extension_item),
+                "maxItems": 128,
+            },
+            "snapshot": {
+                "anyOf": [
+                    {
+                        "type": "object",
+                        "additionalProperties": True,
+                        "maxProperties": 64,
+                    },
+                    {"type": "null"},
+                ]
+            },
+        },
+        "required": ["event"],
+        "additionalProperties": False,
+    }
+
+
+def _npc_data_schemas() -> dict[str, dict[str, Any]]:
+    interlocutors = {
+        "type": "object",
+        "description": (
+            "Declared conversation boundary. actor_ids and principal_ids are authoritative "
+            "campaign identifiers; provide at least one non-empty list."
+        ),
+        "properties": {
+            "actor_ids": _text_list(maximum=64),
+            "principal_ids": _text_list(maximum=64),
+            "publication_scopes": _text_list(
+                maximum=6,
+                item_maximum=64,
+                minimum=1,
+                enum=["table", "public", "group", "actor", "facilitator"],
+            ),
+        },
+        "required": ["publication_scopes"],
+        "anyOf": [
+            {
+                "properties": {"actor_ids": _text_list(maximum=64, minimum=1)},
+                "required": ["actor_ids"],
+            },
+            {
+                "properties": {"principal_ids": _text_list(maximum=64, minimum=1)},
+                "required": ["principal_ids"],
+            },
+        ],
+        "additionalProperties": False,
+    }
+    open_data = {
+        "title": "npc_conversation.open data",
+        "type": "object",
+        "properties": {
+            "interlocutors": interlocutors,
+            "query": _text(maximum=2_000),
+            "reason": _text(maximum=1_000),
+            "current_refs": _text_list(maximum=128),
+        },
+        "required": ["interlocutors"],
+        "additionalProperties": False,
+    }
+    claim_data = {
+        "title": "npc_conversation.claim data",
+        "type": "object",
+        "properties": {
+            "activation_ref": {
+                **_text(maximum=256, minimum=1),
+                "description": "Copy activation.activation_ref from open or refresh.",
+            }
+        },
+        "required": ["activation_ref"],
+        "additionalProperties": False,
+    }
+    refresh_data = {
+        "title": "npc_conversation.refresh data",
+        "type": "object",
+        "properties": {
+            "query": _text(maximum=2_000),
+            "current_refs": _text_list(maximum=128),
+        },
+        "additionalProperties": False,
+    }
+    propose_data = {
+        "title": "npc_conversation.propose data",
+        "type": "object",
+        "properties": {
+            "activation_ref": {
+                **_text(maximum=256, minimum=1),
+                "description": "Copy activation_ref from claim.",
+            },
+            "lease_id": {
+                **_text(maximum=200, minimum=1),
+                "description": "Copy lease_id from claim before lease_expires_at_ns.",
+            },
+            "context_receipt": _npc_context_receipt_schema(),
+            "proposal": _npc_proposal_schema(),
+        },
+        "required": ["activation_ref", "lease_id", "context_receipt", "proposal"],
+        "additionalProperties": False,
+    }
+    publish_data = {
+        "title": "npc_conversation.publish data",
+        "type": "object",
+        "properties": {
+            "proposal_id": {
+                **_text(maximum=200, minimum=1),
+                "description": "Copy proposal_id from propose.",
+            },
+            "audience": _npc_audience_schema(),
+        },
+        "required": ["proposal_id", "audience"],
+        "additionalProperties": False,
+    }
+    close_data = {
+        "title": "npc_conversation.close data",
+        "type": "object",
+        "properties": {
+            "close_token": {
+                **_text(maximum=256, minimum=1),
+                "description": "Copy the close_token returned by open.",
+            },
+            "selected_proposal_ids": {
+                **_text_list(maximum=256, item_maximum=200),
+                "description": "Only proposal_ids already published in this conversation.",
+            },
+            "settlement": _npc_settlement_schema(),
+        },
+        "required": ["close_token"],
+        "additionalProperties": False,
+    }
+    abort_data = {
+        "title": "npc_conversation.abort data",
+        "type": "object",
+        "properties": {
+            "close_token": {
+                **_text(maximum=256, minimum=1),
+                "description": "Copy the close_token returned by open.",
+            },
+            "selected_proposal_ids": {
+                "type": "array",
+                "items": _text(maximum=200, minimum=1),
+                "maxItems": 0,
+                "description": "Abort cannot accept proposals; omit this field or pass [].",
+            },
+        },
+        "required": ["close_token"],
+        "additionalProperties": False,
+    }
+    return {
+        "open": open_data,
+        "claim": claim_data,
+        "refresh": refresh_data,
+        "propose": propose_data,
+        "publish": publish_data,
+        "close": close_data,
+        "abort": abort_data,
+    }
+
+
+def _npc_action_variants(data_schemas: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    common_required = [
+        "campaign_id",
+        "action",
+        "expected_revision",
+        "expected_branch_id",
+        "idempotency_key",
+    ]
+    variants = []
+    for action, data_schema in data_schemas.items():
+        required = list(common_required)
+        properties: dict[str, Any] = {
+            "action": {"const": action},
+            "data": deepcopy(data_schema),
+        }
+        if action == "open":
+            required.extend(["npc_actor_id", "data"])
+            properties["npc_actor_id"] = _text(maximum=128, minimum=1)
+        else:
+            required.append("conversation_id")
+            properties["conversation_id"] = _text(maximum=128, minimum=1)
+            if action != "refresh":
+                required.append("data")
+            else:
+                properties["data"] = {
+                    "anyOf": [deepcopy(data_schema), {"type": "null"}]
+                }
+        variants.append(
+            {
+                "title": f"npc_conversation.{action} input",
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            }
+        )
+    return variants
+
+
+_MINIMAL_RUNTIME_PACK_EXAMPLE = {
+    "id": "seed.example",
+    "version": "1",
+    "title": "Seed",
+    "kind": "campaign_seed",
+    "profile_requirements": [],
+    "dependencies": [],
+    "sources": [{"type": "self-authored", "citation": "source"}],
+    "rights": {"distribution": "private", "license": "self-authored"},
+    "review": {"agent_finalization": True},
+    "content": {
+        "principals": [],
+        "actors": [],
+        "records": [],
+        "actor_knowledge": [],
+        "runtime_manifest": {
+            "schema_version": 1,
+            "id": "manifest.seed",
+            "classification": "emergent_seed",
+            "title": "Opening seed",
+            "lineage": {
+                "root_id": "manifest.seed",
+                "parent_id": "",
+                "generation": 0,
+                "basis_refs": [],
+            },
+            "setting": {"premise": "A city remembers every bargain."},
+            "atlas": {
+                "chapters": [
+                    {
+                        "id": "chapter.opening",
+                        "summary": "The first pressure appears.",
+                        "scene_ids": ["scene.opening"],
+                    }
+                ],
+                "scenes": [
+                    {
+                        "id": "scene.opening",
+                        "summary": "The characters meet at the sealed gate.",
+                        "chapter_id": "chapter.opening",
+                    }
+                ],
+            },
+            "fronts": [
+                {
+                    "id": "front.memory",
+                    "summary": "The city erases broken bargains.",
+                    "linked_thread_ids": ["thread.gate"],
+                }
+            ],
+            "threads": [
+                {
+                    "id": "thread.gate",
+                    "summary": "Who sealed the gate?",
+                    "clue_ids": ["clue.key"],
+                    "linked_front_ids": ["front.memory"],
+                }
+            ],
+            "clues": [
+                {
+                    "id": "clue.key",
+                    "status": "hidden",
+                    "summary": "A wet brass key bears the gate mark.",
+                    "thread_ids": ["thread.gate"],
+                    "scene_ids": ["scene.opening"],
+                }
+            ],
+            "character_arcs": [
+                {
+                    "id": "arc.choice",
+                    "actor_ref": "actor.pc",
+                    "arc_type": "player_opportunity",
+                    "question": "Will the hero trust the ferryman?",
+                    "opportunities": ["scene:scene.opening"],
+                }
+            ],
+        },
+    },
+}
 
 
 def _closed_record(
@@ -447,6 +914,200 @@ _KNOWLEDGE_SCHEMA = _closed_record(
     },
     required={"id", "campaign_id", "actor_id", "knowledge_key", "proposition"},
 )
+
+
+def _runtime_entity_schema(
+    *,
+    statuses: list[str],
+    extra_strings: list[str] | None = None,
+    extra_lists: list[str] | None = None,
+) -> dict[str, Any]:
+    properties: dict[str, Any] = {
+        "id": _text(maximum=128, minimum=1),
+        "title": _text(maximum=300, minimum=1),
+        "status": {"type": "string", "enum": statuses},
+        "summary": _text(maximum=2_000, minimum=1),
+        "evidence_refs": _text_list(maximum=512),
+    }
+    for name in extra_strings or []:
+        properties[name] = _text(maximum=2_000, minimum=1)
+    for name in extra_lists or []:
+        properties[name] = _text_list(maximum=512)
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": ["id", "title", "status", "summary", "evidence_refs"],
+        "additionalProperties": False,
+    }
+
+
+def _runtime_manifest_schema() -> dict[str, Any]:
+    chapter = _runtime_entity_schema(
+        statuses=["open", "active", "completed"], extra_lists=["scene_ids"]
+    )
+    scene = _runtime_entity_schema(
+        statuses=["open", "active", "completed"],
+        extra_strings=["chapter_id", "location_ref", "source_kind"],
+    )
+    front = _runtime_entity_schema(
+        statuses=["dormant", "open", "active", "escalated", "resolved"],
+        extra_strings=["pressure", "stakes"],
+        extra_lists=["linked_thread_ids"],
+    )
+    thread = _runtime_entity_schema(
+        statuses=["open", "active", "resolved", "abandoned"],
+        extra_strings=["question"],
+        extra_lists=["clue_ids", "linked_front_ids"],
+    )
+    clue = _runtime_entity_schema(
+        statuses=["hidden", "open", "discovered", "interpreted"],
+        extra_strings=["statement"],
+        extra_lists=["thread_ids", "scene_ids"],
+    )
+    arc = {
+        "type": "object",
+        "properties": {
+            "id": _text(maximum=128, minimum=1),
+            "actor_ref": _text(maximum=300, minimum=1),
+            "arc_type": {"enum": ["player_opportunity", "npc_arc"]},
+            "title": _text(maximum=300, minimum=1),
+            "question": _text(maximum=2_000, minimum=1),
+            "status": {"enum": ["open", "active", "completed", "abandoned"]},
+            "opportunities": _text_list(maximum=512),
+            "evidence_refs": _text_list(maximum=512),
+        },
+        "required": [
+            "id",
+            "actor_ref",
+            "arc_type",
+            "title",
+            "question",
+            "status",
+            "opportunities",
+            "evidence_refs",
+        ],
+        "additionalProperties": False,
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "schema_version": {"const": 1},
+            "id": _text(maximum=128, minimum=1),
+            "pack_key": _text(maximum=300, minimum=1),
+            "classification": {
+                "enum": ["authored_narrative", "emergent_seed", "emergent_episode"]
+            },
+            "title": _text(maximum=300, minimum=1),
+            "lineage": {
+                "type": "object",
+                "properties": {
+                    "root_id": _text(maximum=128, minimum=1),
+                    "parent_id": _text(maximum=128),
+                    "generation": {"type": "integer", "minimum": 0},
+                    "basis_refs": _text_list(maximum=512),
+                },
+                "required": ["root_id", "parent_id", "generation", "basis_refs"],
+                "additionalProperties": False,
+            },
+            "setting": {
+                "type": "object",
+                "properties": {
+                    "premise": _text(maximum=4_000, minimum=1),
+                    "themes": _text_list(maximum=512),
+                    "boundaries": _text_list(maximum=512),
+                    "evidence_refs": _text_list(maximum=512),
+                },
+                "required": ["premise", "themes", "boundaries", "evidence_refs"],
+                "additionalProperties": False,
+            },
+            "atlas": {
+                "type": "object",
+                "properties": {
+                    "chapters": {"type": "array", "items": chapter, "maxItems": 512},
+                    "scenes": {"type": "array", "items": scene, "maxItems": 512},
+                },
+                "required": ["chapters", "scenes"],
+                "additionalProperties": False,
+            },
+            "fronts": {"type": "array", "items": front, "maxItems": 512},
+            "threads": {"type": "array", "items": thread, "maxItems": 512},
+            "clues": {"type": "array", "items": clue, "maxItems": 512},
+            "character_arcs": {"type": "array", "items": arc, "maxItems": 512},
+        },
+        "required": [
+            "schema_version",
+            "id",
+            "pack_key",
+            "classification",
+            "title",
+            "lineage",
+            "setting",
+            "atlas",
+            "fronts",
+            "threads",
+            "clues",
+            "character_arcs",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def _campaign_design_schema() -> dict[str, Any]:
+    history = {
+        "type": "object",
+        "properties": {
+            "status": _text(maximum=128, minimum=1),
+            "evidence_refs": _text_list(maximum=512),
+            "note": _text(maximum=2_000, minimum=1),
+            "campaign_revision": {"type": "integer", "minimum": 0},
+        },
+        "required": ["status", "evidence_refs", "note", "campaign_revision"],
+        "additionalProperties": False,
+    }
+    progress_value = {
+        "type": "object",
+        "properties": {
+            "status": _text(maximum=128, minimum=1),
+            "evidence_refs": _text_list(maximum=512),
+            "note": _text(maximum=2_000, minimum=1),
+            "history": {"type": "array", "items": history, "maxItems": 10_000},
+        },
+        "required": ["status", "evidence_refs", "note", "history"],
+        "additionalProperties": False,
+    }
+    progress_collection = {
+        "type": "object",
+        "additionalProperties": progress_value,
+        "maxProperties": 10_000,
+    }
+    return {
+        "title": "narrative_queryCampaignDesignOutput",
+        "type": "object",
+        "properties": {
+            "schema_version": {"const": 1},
+            "campaign_mode": {
+                "enum": ["authored_narrative", "authored_with_extensions", "emergent"]
+            },
+            "manifests": {
+                "type": "object",
+                "additionalProperties": _runtime_manifest_schema(),
+                "maxProperties": 512,
+            },
+            "progress": {
+                "type": "object",
+                "properties": {
+                    "front": deepcopy(progress_collection),
+                    "thread": deepcopy(progress_collection),
+                    "clue": deepcopy(progress_collection),
+                    "character_arc": deepcopy(progress_collection),
+                },
+                "required": ["front", "thread", "clue", "character_arc"],
+                "additionalProperties": False,
+            },
+        },
+        "required": ["schema_version", "campaign_mode", "manifests", "progress"],
+        "additionalProperties": False,
+    }
 
 
 def _field_schema(name: str) -> dict[str, Any]:
@@ -936,6 +1597,25 @@ def _bounded_input_schema(tool_name: str, schema: dict[str, Any]) -> dict[str, A
                 variant.setdefault("maxItems", _COLLECTION_LIMITS.get(name, 128))
             elif variant.get("type") == "object" and variant.get("additionalProperties"):
                 variant.setdefault("maxProperties", _OBJECT_LIMITS.get(name, 128))
+    if tool_name == "pack_change":
+        pack_schema = value["properties"]["pack"]
+        pack_schema["description"] = (
+            "Versioned Pack. content remains profile-extensible; for authored or emergent "
+            "campaign design, copy the runtime_manifest shape from this example under content. "
+            "The server binds runtime_manifest.pack_key to the "
+            "Pack id@version, so omit that field from the draft."
+        )
+        pack_schema["examples"] = [deepcopy(_MINIMAL_RUNTIME_PACK_EXAMPLE)]
+    if tool_name == "npc_conversation":
+        data_schemas = _npc_data_schemas()
+        value["properties"]["data"] = {
+            "description": PARAMETER_DESCRIPTIONS["data"],
+            "anyOf": [
+                *[deepcopy(data_schemas[action]) for action in data_schemas],
+                {"type": "null"},
+            ],
+        }
+        value["oneOf"] = _npc_action_variants(data_schemas)
     value["title"] = f"{tool_name}Input"
     return value
 
@@ -982,7 +1662,7 @@ def _output_schema(tool_name: str) -> dict[str, Any]:
     return {
         "title": "narrative_queryOutput",
         "type": "object",
-        "oneOf": [base, direct_record],
+        "oneOf": [base, direct_record, _campaign_design_schema()],
     }
 
 
