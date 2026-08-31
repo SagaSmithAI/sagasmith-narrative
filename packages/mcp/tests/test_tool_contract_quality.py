@@ -133,6 +133,57 @@ def test_model_repairable_errors_are_structured(tmp_path: Path) -> None:
     asyncio.run(exercise())
 
 
+def test_actor_change_results_match_the_advertised_output_schema(tmp_path: Path) -> None:
+    async def exercise() -> None:
+        server = _server(tmp_path)
+        campaign = server.runtime.campaign_create(
+            name="Actor contract",
+            principal_id="system:local",
+            idempotency_key="actor-contract-campaign",
+        )
+        tool = next(item for item in await server.list_tools() if item.name == "actor_change")
+        validator = Draft202012Validator(tool.output_schema)
+
+        async with Client(server, mode="2026-07-28") as client:
+            created = await client.call_tool(
+                "actor_change",
+                {
+                    "campaign_id": campaign["id"],
+                    "action": "create",
+                    "actor": {
+                        "name": "Schema witness",
+                        "type": "npc",
+                        "summary": "Confirms the public result contract.",
+                    },
+                    "expected_revision": campaign["revision"],
+                    "expected_branch_id": server.runtime.branch_id(campaign["id"]),
+                    "idempotency_key": "actor-contract-create",
+                },
+            )
+            assert not created.is_error, created.structured_content
+            validator.validate(created.structured_content)
+
+            actor = created.structured_content
+            assert actor["character_type"] == "npc"
+            updated = await client.call_tool(
+                "actor_change",
+                {
+                    "campaign_id": campaign["id"],
+                    "action": "update",
+                    "actor_id": actor["id"],
+                    "actor": {"summary": "Still schema-valid after an update."},
+                    "expected_actor_revision": actor["revision"],
+                    "expected_revision": actor["campaign_revision"],
+                    "expected_branch_id": server.runtime.branch_id(campaign["id"]),
+                    "idempotency_key": "actor-contract-update",
+                },
+            )
+            assert not updated.is_error, updated.structured_content
+            validator.validate(updated.structured_content)
+
+    asyncio.run(exercise())
+
+
 def test_advertised_input_bounds_are_enforced_before_tool_execution(tmp_path: Path) -> None:
     async def exercise() -> None:
         async with Client(_server(tmp_path), mode="2026-07-28") as client:
