@@ -492,6 +492,104 @@ def test_scene_authority_and_npc_private_proposal_recovery(tmp_path: Path) -> No
     assert "private motive" not in str(closed)
 
 
+def test_npc_close_rejects_private_knowledge_before_closing_conversation(
+    tmp_path: Path,
+) -> None:
+    rt = runtime(tmp_path / "npc-close-audience.db")
+    campaign_id = campaign(rt)
+    activate_profile(rt, campaign_id, capabilities=["npc_conversation"])
+    npc = rt.actor_create(
+        campaign_id,
+        principal_id="owner",
+        actor={"name": "Audience NPC", "type": "npc"},
+        expected_revision=state(rt, campaign_id)[0],
+        expected_branch_id=state(rt, campaign_id)[1],
+        idempotency_key="audience-npc-create",
+    )
+    enter_play(rt, campaign_id)
+    revision, branch_id = state(rt, campaign_id)
+    opened = rt.npc_conversation(
+        campaign_id,
+        action="open",
+        npc_actor_id=npc["id"],
+        data={
+            "interlocutors": {
+                "principal_ids": ["owner"],
+                "publication_scopes": ["public"],
+            }
+        },
+        principal_id="owner",
+        expected_revision=revision,
+        expected_branch_id=branch_id,
+        idempotency_key="audience-npc-open",
+    )
+    conversation_id = opened["conversation"]["id"]
+    revision, branch_id = state(rt, campaign_id)
+    with pytest.raises(ValueError, match="private dm event"):
+        rt.npc_conversation(
+            campaign_id,
+            action="close",
+            conversation_id=conversation_id,
+            data={
+                "close_token": opened["close_token"],
+                "settlement": {
+                    "event": {
+                        "event_type": "npc.private-memory-rejected",
+                        "summary": "Private NPC memory must not reach an owner projection.",
+                        "audience_scope": "dm",
+                    },
+                    "actor_knowledge": [
+                        {
+                            "actor_id": npc["id"],
+                            "knowledge_key": "leaked-owner-memory",
+                            "proposition": "The NPC hid the key under the bell.",
+                            "disclosure_scope": "owner",
+                        }
+                    ],
+                },
+            },
+            principal_id="owner",
+            expected_revision=revision,
+            expected_branch_id=branch_id,
+            idempotency_key="npc-close-audience",
+        )
+
+    assert state(rt, campaign_id) == (revision, branch_id)
+    document = narrative_document(rt.campaigns.get(campaign_id).state)
+    assert document["npc_conversations"][conversation_id]["status"] == "open"
+    assert rt.events.list(campaign_id, branch_id=branch_id) == []
+
+    # The rejected close did not reserve the key or consume the conversation.
+    closed = rt.npc_conversation(
+        campaign_id,
+        action="close",
+        conversation_id=conversation_id,
+        data={
+            "close_token": opened["close_token"],
+            "settlement": {
+                "event": {
+                    "event_type": "npc.private-memory",
+                    "summary": "The NPC keeps a private memory.",
+                    "audience_scope": "dm",
+                },
+                "actor_knowledge": [
+                    {
+                        "actor_id": npc["id"],
+                        "knowledge_key": "private-memory",
+                        "proposition": "The NPC hid the key under the bell.",
+                        "disclosure_scope": "dm",
+                    }
+                ],
+            },
+        },
+        principal_id="owner",
+        expected_revision=revision,
+        expected_branch_id=branch_id,
+        idempotency_key="npc-close-audience",
+    )
+    assert closed["npc_conversation"]["status"] == "closed"
+
+
 def test_snapshot_and_branch_changes_are_admin_cas_and_exactly_replayable(
     tmp_path: Path,
 ) -> None:
