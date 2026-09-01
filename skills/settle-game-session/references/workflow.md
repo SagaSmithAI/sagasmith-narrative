@@ -34,3 +34,5 @@
 Refresh after settlement, snapshot, phase/profile/grant/branch/restore changes, or notification. A recap is never authority. Use MCP only; no CLI, DB/core, fabricated receipt, or manual fallback settlement.
 
 Every campaign write carries `campaign_id`, trusted `principal_id`, `expected_revision`, `expected_branch_id`, and `idempotency_key`. Verify the returned `host_context_binding`, including profile checksum and exposure revision.
+
+When constructing a settlement, treat `actor_knowledge[].source_event_id` as the effective source (it defaults to the settlement event). A private/DM source event may only support `disclosure_scope: dm`; `owner`, `party`, `player`, and `public` ActorKnowledge must be sourced by a non-DM event. The same rule applies to downtime/world-turn settlement and NPC close forwarding. Reject the proposal locally before retrying if these scopes are incompatible.

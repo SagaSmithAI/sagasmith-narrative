@@ -86,7 +86,7 @@
       "input": {"phase": "play"},
       "then": {
         "tool": "narrative_settle",
-        "event": {"event_type": "ash-harbor.background_initialized", "summary": "战役开始时各角色仅持有自己的背景知识。", "audience_scope": "dm"},
+        "event": {"event_type": "ash-harbor.background_initialized", "summary": "战役开始时各角色仅持有自己的背景知识。", "audience_scope": "actor"},
         "actor_knowledge_from": "campaign-seed.json#/content/actor_knowledge"
       },
       "assert": [
@@ -293,7 +293,7 @@
         {
           "tool": "narrative_settle",
           "principal": "facilitator",
-          "event": {"event_type": "ash-harbor.deadlight_route_shared", "summary": "塞林只向伊沃说明了通往燃尽灯塔的低潮管道。", "audience_scope": "dm"},
+          "event": {"event_type": "ash-harbor.deadlight_route_shared", "summary": "塞林只向伊沃说明了通往燃尽灯塔的低潮管道。", "audience_scope": "actor"},
           "record_patches": [
             {"id": "relationship.ivo_serin", "patch": {"data": {"from_ref": "actor.ivo", "to_ref": "actor.serin", "rating": 2, "tags": ["debt_acknowledged"]}}}
           ],
@@ -319,7 +319,7 @@
         {"tool": "scene_change", "action": "start"},
         {
           "tool": "narrative_settle",
-          "event": {"event_type": "ash-harbor.charter_recovered", "summary": "三人在沉船密库中找到了初代港章原件。", "audience_scope": "dm"},
+          "event": {"event_type": "ash-harbor.charter_recovered", "summary": "三人在沉船密库中找到了初代港章原件。", "audience_scope": "actor"},
           "record_patches": [
             {"id": "clock.vault_breach", "patch": {"status": "completed", "data": {"current": 6, "maximum": 6, "completion": "密库记录可作为港口章程证据"}}},
             {"id": "secret.first_charter", "patch": {"status": "discovered"}},

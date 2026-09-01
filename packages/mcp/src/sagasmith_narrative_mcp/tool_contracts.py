@@ -75,7 +75,12 @@ TOOL_DESCRIPTIONS = {
     "campaign_design_change": "Advance one declared narrative line with explicit evidence.",
     "campaign_expansion": "Issue or validate a bounded zero-tool narrative expansion proposal.",
     "narrative_change": "Create or update one profile-defined narrative record.",
-    "narrative_settle": "Atomically settle an event, records, facts, knowledge, and snapshot.",
+    "narrative_settle": (
+        "Atomically settle an event, records, facts, knowledge, and snapshot. "
+        "ActorKnowledge disclosure must not be broader than its effective source event: "
+        "a private dm event may support only disclosure_scope=dm; owner, party, player, "
+        "and public knowledge require a non-dm source."
+    ),
     "continuity_query": "Read bounded, audience-filtered continuity for a campaign or actor.",
     "mechanic_resolve": "Resolve a profile mechanic with a deterministic campaign random receipt.",
     "npc_conversation": (
@@ -113,9 +118,16 @@ PARAMETER_DESCRIPTIONS = {
         "spellings must match when supplied."
     ),
     "actor_id": "Authoritative actor identifier within the selected campaign.",
-    "actor_knowledge": "Audience-scoped actor knowledge changes to settle atomically.",
+    "actor_knowledge": (
+        "Audience-scoped actor knowledge changes to settle atomically. Its source_event_id "
+        "defaults to the settlement event; a dm source can only support disclosure_scope=dm. "
+        "Use owner, party, player, or public disclosure only with a non-dm source."
+    ),
     "add_tool_ids": "Tool identifiers to add to this Host guidance handle.",
-    "audience_scope": "Audience allowed to observe the settled event and payload.",
+    "audience_scope": (
+        "Audience allowed to observe the settled event and payload. If the event is dm/private, "
+        "every ActorKnowledge item sourced from it must use disclosure_scope=dm."
+    ),
     "branch_id": "Authoritative branch identifier to check out.",
     "campaign_id": "Authoritative campaign identifier; never inferred from model prose.",
     "can_control": "Whether the target principal may mutate the actor or element.",
@@ -136,7 +148,10 @@ PARAMETER_DESCRIPTIONS = {
     "evidence_refs": (
         "Authoritative event, scene, record, or fact references supporting the change."
     ),
-    "event": "Authoritative event document to commit during settlement.",
+    "event": (
+        "Authoritative event document to commit during settlement. Its audience_scope is the "
+        "default source audience for ActorKnowledge; dm/private permits only disclosure_scope=dm."
+    ),
     "expected_actor_revision": "Actor revision that must still be current for an update.",
     "expected_branch_id": "Branch that must still be current before a write commits.",
     "expected_record_revision": "Record revision that must still be current for an update.",
@@ -407,7 +422,8 @@ def _npc_settlement_schema() -> dict[str, Any]:
         "type": "object",
         "description": (
             "Optional atomic close settlement. event is required; remaining documents follow "
-            "the same active-profile contracts as narrative_settle."
+            "the same active-profile contracts as narrative_settle. The settlement event is the "
+            "default knowledge source; a dm/private source may only back disclosure_scope=dm."
         ),
         "properties": {
             "event": {

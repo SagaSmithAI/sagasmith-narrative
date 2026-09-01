@@ -40,6 +40,8 @@ Close or abort before mechanics, scene mutation, phase/Conflict transition, role
 
 Every write carries `campaign_id`, trusted `principal_id`, `expected_revision`, `expected_branch_id`, and `idempotency_key`. Verify the complete returned `host_context_binding` after open/publish/close/abort.
 
+For a close settlement, `actor_knowledge[].source_event_id` defaults to its settlement event. Keep the audience boundary intact: a `dm`/private source can only create `disclosure_scope: dm`; use a non-DM source for `owner`, `party`, `player`, or `public` ActorKnowledge. This validation applies before any conversation close or settlement delta is committed.
+
 ## Boundary
 
 Host owns worker execution; MCP owns activation, journal, authorization, publications, revisions, and close settlement; Agent owns NPC response selection. No CLI, direct DB/core, raw proposal leak, or fallback dialogue path.

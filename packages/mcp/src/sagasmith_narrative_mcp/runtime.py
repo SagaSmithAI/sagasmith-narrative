@@ -37,7 +37,10 @@ from sagasmith_core.knowledge import ACTOR_KNOWLEDGE_DISCLOSURE_SCOPES
 from sagasmith_core.models import (
     ActorGrant,
     ActorKnowledge,
+    ActorKnowledgeRevision,
+    BranchActorKnowledgeHead,
     Campaign,
+    CampaignEvent,
     CampaignMembership,
     CampaignMemory,
     Character,
@@ -75,6 +78,8 @@ from .actor_memory import select_actor_memory_context
 
 ADMIN_ROLES = {"owner", "dm"}
 PUBLIC_ACTOR_DISCLOSURE_SCOPES = frozenset({"party", "public", "player"})
+PRIVATE_EVENT_AUDIENCE = "dm"
+PRIVATE_KNOWLEDGE_DISCLOSURE = "dm"
 
 
 class NarrativeRuntime:
@@ -368,6 +373,60 @@ class NarrativeRuntime:
                 bool(grant and grant.can_control),
                 bool(grant and grant.can_view_private),
             )
+
+    @staticmethod
+    def _validate_settlement_knowledge_audience(
+        session,
+        *,
+        campaign_id: str,
+        branch_id: str,
+        settlement_audience: str,
+        actor_knowledge: list[dict[str, Any]],
+    ) -> None:
+        """Keep private source events from backing player-visible knowledge.
+
+        A knowledge entry may explicitly point at an existing source event;
+        otherwise the settlement event is its source.  Resolve the effective
+        disclosure for revisions before accepting the atomic settlement so no
+        conversation, document, event, revision, or idempotency row can be
+        committed for an incompatible pair.
+        """
+
+        for item in actor_knowledge:
+            action = str(item.get("action") or "add")
+            disclosure = item.get("disclosure_scope")
+            if action == "revise" and disclosure is None:
+                knowledge_id = str(item.get("knowledge_id") or "")
+                knowledge = session.get(ActorKnowledge, knowledge_id)
+                if knowledge is not None and knowledge.campaign_id == campaign_id:
+                    head = session.get(
+                        BranchActorKnowledgeHead,
+                        {"branch_id": branch_id, "knowledge_id": knowledge.id},
+                    )
+                    current = session.get(
+                        ActorKnowledgeRevision,
+                        head.revision_id,
+                    ) if head is not None else None
+                    disclosure = current.disclosure_scope if current is not None else None
+            if disclosure not in ACTOR_KNOWLEDGE_DISCLOSURE_SCOPES:
+                # Preserve the core validator and its error for invalid or
+                # missing values; this helper only checks valid vocab entries.
+                continue
+
+            source_audience = settlement_audience
+            source_event_id = item.get("source_event_id")
+            if source_event_id:
+                source = session.get(CampaignEvent, str(source_event_id))
+                if source is not None and source.campaign_id == campaign_id:
+                    source_audience = str(source.audience_scope)
+            if (
+                source_audience == PRIVATE_EVENT_AUDIENCE
+                and disclosure != PRIVATE_KNOWLEDGE_DISCLOSURE
+            ):
+                raise ValueError(
+                    "private dm event cannot support actor knowledge disclosure "
+                    f"{disclosure!r}; use disclosure_scope='dm' or a non-private source event"
+                )
 
     def require_actor_authority(
         self,
@@ -3389,6 +3448,13 @@ class NarrativeRuntime:
                 return deepcopy(replay_tx.response)
             document = narrative_document(campaign.state)
             actor_bindings = dict(document.get("actor_bindings") or {})
+            self._validate_settlement_knowledge_audience(
+                session,
+                campaign_id=campaign_id,
+                branch_id=branch.id,
+                settlement_audience=str(event.get("audience_scope") or "public"),
+                actor_knowledge=actor_knowledge or [],
+            )
             if not self._has_facilitator_authority(document, role):
                 for participant in event.get("participants") or []:
                     actor_ref = required_text(
