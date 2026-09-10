@@ -25,6 +25,25 @@ def create_campaign(rt: NarrativeRuntime) -> str:
     ]
 
 
+def test_invalid_profile_numbers_do_not_write_or_consume_idempotency(tmp_path: Path) -> None:
+    rt = runtime(tmp_path)
+    campaign_id = create_campaign(rt)
+    revision, branch = state(rt, campaign_id)
+    profile = {"id": "profile.test", "version": "1", "mechanics_level": False}
+    arguments = {
+        "action": "create_draft", "profile": profile, "principal_id": "owner",
+        "expected_revision": revision, "expected_branch_id": branch,
+        "idempotency_key": "numeric-profile",
+    }
+    with pytest.raises(ValueError, match="mechanics_level"):
+        rt.profile_change(campaign_id, **arguments)
+    assert state(rt, campaign_id) == (revision, branch)
+    profile["mechanics_level"] = 0
+    result = rt.profile_change(campaign_id, **arguments)
+    assert rt.profile_change(campaign_id, **arguments) == result
+    assert state(rt, campaign_id)[0] == revision + 1
+
+
 def finalize_profile(rt: NarrativeRuntime, campaign_id: str, *, conflict: bool = True) -> None:
     revision, branch = state(rt, campaign_id)
     profile = {

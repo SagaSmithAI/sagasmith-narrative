@@ -48,3 +48,43 @@ def test_record_validation_preserves_explicit_audience_and_controller() -> None:
 def test_narrative_document_rejects_unknown_phase() -> None:
     with pytest.raises(ValueError, match="invalid narrative phase"):
         narrative_document({"narrative": {**initial_document(), "phase": "combat"}})
+
+
+@pytest.mark.parametrize("value", [True, False, "1", 1.5, None])
+def test_profile_level_requires_an_integer(value) -> None:
+    with pytest.raises(ValueError, match="mechanics_level"):
+        validate_profile({"id": "profile.test", "version": "1", "mechanics_level": value})
+
+
+@pytest.mark.parametrize("field", ["sides", "max_dice", "minimum", "maximum"])
+@pytest.mark.parametrize("value", [True, "6", 6.5, None])
+def test_dice_parameters_reject_lossy_numeric_coercion(field, value) -> None:
+    mechanic = {
+        "id": "mechanic.roll", "kind": "dice_pool", "sides": 6, "max_dice": 20,
+        "bands": [{"minimum": 1, "maximum": 6}],
+    }
+    target = mechanic["bands"][0] if field in {"minimum", "maximum"} else mechanic
+    target[field] = value
+    with pytest.raises(ValueError, match=field):
+        validate_profile({
+            "id": "profile.test", "version": "1", "mechanics_level": 1,
+            "capabilities": ["mechanics"], "mechanics": [mechanic],
+        })
+
+
+@pytest.mark.parametrize("value", [0, 101])
+def test_dice_limit_is_rejected_instead_of_silently_clamped(value) -> None:
+    with pytest.raises(ValueError, match="max_dice"):
+        validate_profile({
+            "id": "profile.test", "version": "1", "mechanics_level": 1,
+            "capabilities": ["mechanics"], "mechanics": [{
+                "id": "mechanic.roll", "kind": "dice_pool", "max_dice": value,
+                "bands": [{"minimum": 1, "maximum": 6}],
+            }],
+        })
+
+
+@pytest.mark.parametrize("value", [True, "2", 2.5, None])
+def test_record_revision_requires_an_integer(value) -> None:
+    with pytest.raises(ValueError, match="revision"):
+        validate_record({"id": "thread.test", "kind": "thread", "revision": value})
