@@ -66,6 +66,12 @@ def required_text(value: Any, field: str, *, limit: int = 4000) -> str:
     return normalized
 
 
+def _integer(value: Any, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field} must be an integer")
+    return value
+
+
 def _text_list(value: Any, field: str, *, limit: int = 128) -> list[str]:
     if value is None:
         return []
@@ -241,7 +247,7 @@ def validate_profile(value: Mapping[str, Any], *, finalized: bool = False) -> di
     profile = deepcopy(dict(value))
     profile_id = required_id(profile.get("id"), "profile.id")
     version = required_text(profile.get("version"), "profile.version", limit=64)
-    level = int(profile.get("mechanics_level", 0))
+    level = _integer(profile.get("mechanics_level", 0), "mechanics_level")
     if level not in {0, 1}:
         raise ValueError("mechanics_level must be 0 or 1")
     capabilities = sorted(
@@ -264,11 +270,14 @@ def validate_profile(value: Mapping[str, Any], *, finalized: bool = False) -> di
         if kind not in {"dice_pool", "table", "track_delta", "resource_delta"}:
             raise ValueError(f"unsupported Level 1 mechanic kind: {kind}")
         if kind == "dice_pool":
-            sides = int(item.get("sides", 6))
+            sides = _integer(item.get("sides", 6), "dice_pool sides")
             if sides < 2 or sides > 1000:
                 raise ValueError("dice_pool sides must be between 2 and 1000")
             item["sides"] = sides
-            item["max_dice"] = min(100, max(1, int(item.get("max_dice", 20))))
+            max_dice = _integer(item.get("max_dice", 20), "dice_pool max_dice")
+            if not 1 <= max_dice <= 100:
+                raise ValueError("dice_pool max_dice must be between 1 and 100")
+            item["max_dice"] = max_dice
             bands = list(item.get("bands") or [])
             if not bands:
                 raise ValueError("dice_pool requires result bands")
@@ -276,8 +285,8 @@ def validate_profile(value: Mapping[str, Any], *, finalized: bool = False) -> di
             normalized_bands = []
             for raw_band in bands:
                 band = deepcopy(dict(raw_band))
-                minimum = int(band.get("minimum", 1))
-                maximum = int(band.get("maximum", sides))
+                minimum = _integer(band.get("minimum", 1), "dice band minimum")
+                maximum = _integer(band.get("maximum", sides), "dice band maximum")
                 if minimum < 1 or maximum > sides or minimum > maximum:
                     raise ValueError("dice result band is outside die bounds")
                 values = set(range(minimum, maximum + 1))
@@ -297,8 +306,8 @@ def validate_profile(value: Mapping[str, Any], *, finalized: bool = False) -> di
             if any(not isinstance(entry, Mapping) for entry in entries):
                 raise ValueError("table entries must be objects")
         else:
-            item["minimum"] = int(item.get("minimum", 0))
-            item["maximum"] = int(item.get("maximum", 100))
+            item["minimum"] = _integer(item.get("minimum", 0), "mechanic minimum")
+            item["maximum"] = _integer(item.get("maximum", 100), "mechanic maximum")
             if item["minimum"] > item["maximum"]:
                 raise ValueError("mechanic minimum cannot exceed maximum")
         normalized_mechanics.append(item)
@@ -377,7 +386,7 @@ def validate_record(value: Mapping[str, Any]) -> dict[str, Any]:
     kind = str(record.get("kind") or "")
     if kind not in RECORD_KINDS and not kind.startswith("profile:"):
         raise ValueError(f"unsupported narrative record kind: {kind}")
-    revision = int(record.get("revision", 0))
+    revision = _integer(record.get("revision", 0), "record revision")
     if revision < 0:
         raise ValueError("record revision cannot be negative")
     audience = validate_audience(record.get("audience"), field="record.audience")
